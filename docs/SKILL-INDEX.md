@@ -9,9 +9,64 @@
 - 一个主题一篇文档，不把 reconfigure / switchover / TLS / backup 这类内容混写。
 - 同一主题的后续增量，优先继续迭代原文件，不另开平行文档。
 
-## 主题文档
+## 按场景找文档
 
-这些文档描述可复用的方法论、检查项、验证口径和常见坑：
+3-月-future-team 接手新 KubeBlocks Addon 时，按当前面对的工作场景进入相应文档。每篇方法论 doc 主要覆盖一个场景；少数跨场景的会在多个分组里出现并打 *(also relevant)* 标。
+
+### 1. 设计 / 开发新 addon
+
+调试 ComponentDefinition / 配置 lifecycle action / 决定 bootstrap 与角色发布逻辑：
+
+- [`addon-bootstrap-role-publish-guide.md`](addon-bootstrap-role-publish-guide.md) — bootstrap 初期先收 role truth、再发 role label / service / endpoint 的链路
+- [`addon-control-plane-election-guide.md`](addon-control-plane-election-guide.md) — 选主职责收口到单一 control-plane，避免多脚本并行抢拍板权
+- [`addon-reconfigure-guide.md`](addon-reconfigure-guide.md) — 动态 vs 静态参数、`reconfigure.exec` vs legacy `reloadAction`、live-apply 路径排障
+- [`addon-switchover-guide.md`](addon-switchover-guide.md) — switchover / failover 幂等性，重入下的 candidate 与角色收敛
+- [`addon-tls-guide.md`](addon-tls-guide.md) — TLS 产品语义、明文拒绝正向验证、与 reconfigure / backup / switchover 组合验证
+- [`addon-componentdefinition-upgrade-guide.md`](addon-componentdefinition-upgrade-guide.md) — `ComponentDefinition` 升级时识别 immutable spec blocker、何时走新名字 vs 同名覆盖
+
+### 2. 写新 smoke / chaos 测试
+
+设计 helper / runner / 验收口径，把第一次撞 bug 的责任落对层：
+
+- [`addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md) — 成功语义分层、first blocker 分层、validation-only gate 身份固定、现场冻结
+- [`addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md) — 探针失败分到 `route_api` / `<client>_<channel>` / `empty_output` / `parse_empty` / `runtime_mismatch` / `real_*_mismatch` 等正确层
+- [`addon-bounded-eventual-convergence-guide.md`](addon-bounded-eventual-convergence-guide.md) — 异步收敛系统的状态判定必须 bounded retry，禁止单次 snapshot 当结论 *(also relevant in: 设计 / 开发新 addon — addon 启动 / rejoin / reconfigure 后的判定面)*
+- [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) — 对自己产出的结论也做 bounded retry：N=1→"average" / 间接旁证→"系统性证伪" / 动机假设→narrative inflation 三类反模式
+
+### 3. 环境 ready 前 / 环境层撞坑
+
+测试 runner 跑起来之前 / 测试机重启后 / 镜像 / 路由 / CSI / Backup 前置：
+
+- [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) — 环境就绪逐项坐实清单（API 路由 / 控制器身份 / CSI / 镜像分发 / staged anchors / fresh slot / capability），post-restart 禁止复用 pre-restart 事实
+- [`addon-k3d-kubeconfig-loopback-fix-guide.md`](addon-k3d-kubeconfig-loopback-fix-guide.md) — k3d 默认 kubeconfig server 写成 `0.0.0.0` 在 macOS 报 EOF；统一改 `127.0.0.1`
+- [`addon-k3d-image-import-multiarch-workaround-guide.md`](addon-k3d-image-import-multiarch-workaround-guide.md) — k3d 节点拉 docker.io 超时 + `k3d image import` 在 multi-arch manifest 上的静默 bug；走 host `docker save` + 节点 `ctr import`
+- [`addon-k3d-backup-restore-prereqs-guide.md`](addon-k3d-backup-restore-prereqs-guide.md) — k3d 跑 Backup/Restore 的两层前置：装 VolumeSnapshot CRD + 建默认 BackupRepo
+
+### 4. 运行期 / 排障
+
+集群已经跑起来后撞到的问题，分流到对应方法论：
+
+- [`addon-ops-restart-troubleshooting-guide.md`](addon-ops-restart-troubleshooting-guide.md) — Restart / RollingUpdate "卡住"时先分 `queue 入口未放行` vs `执行体内部`，再用"冻结样本 + clean restart"两段式验证
+- [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](addon-chart-vs-kb-schema-skew-diagnosis-guide.md) — `helm install` 报 `field not declared in schema` 时区分「chart 局部 bug」/「整代代差」/「chart 跟 KB main 但 API 未发布」三种根因
+- [`addon-narrow-scope-force-delete-guide.md`](addon-narrow-scope-force-delete-guide.md) — pod 在 image pull 阶段被删引发的五级 finalizer 死锁；force-delete 那一个 stuck pod，不要 patch finalizer
+- [`addon-test-host-stress-and-pollution-accumulation-guide.md`](addon-test-host-stress-and-pollution-accumulation-guide.md) — 共享 host k3d 跑全量回归撞 cascade 信号时不要先 docker restart；清污染让控制面自愈是 first-line recovery
+
+### 5. 改造 runner / 工具链
+
+写测试基础设施 / shell helper / 跨平台 portability：
+
+- [`addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md) — macOS bash 3.2 + `set -euo pipefail` 下 7 个常见兼容坑（空数组、env-default 时机、`local x=$(cmd)` 等）
+
+### 跨场景方法论（reusable framework）
+
+下面两篇虽然分别出现在场景 2，但本质是 **跨场景方法论**，任何分布式异步系统的判定面或任何外发结论都适用，建议作为团队共同基线：
+
+- [`addon-bounded-eventual-convergence-guide.md`](addon-bounded-eventual-convergence-guide.md) — 外向 bounded retry：对外部异步系统的观察要多次 sample
+- [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) — 内向 evidence discipline：对自己产出的结论要多 round challenge / 自我 review
+
+## 文档全列表（详细描述）
+
+按文档主题依次列出，含完整 metadata 描述，作为详细 reference：
 
 - [`docs/addon-reconfigure-guide.md`](addon-reconfigure-guide.md)
 - [`docs/addon-switchover-guide.md`](addon-switchover-guide.md)
@@ -60,6 +115,7 @@
 
 ## 使用建议
 
-- 先读主题文档，建立通用判断框架。
-- 遇到具体引擎问题时，再进入对应案例材料。
+- 如果不知道从哪进入：从「按场景找文档」选当前最贴的场景。
+- 已有具体方法论问题：直接进对应主题文档（详细描述在「文档全列表」里）。
+- 遇到具体引擎问题时：再进入对应案例材料，但**不要替代主题文档作为决策基线**。
 - 如果后续新增 Backup / Restore / Upgrade / Failover 等材料，也按同样方式放进 `docs/cases/<engine>/`，不要直接堆到 `docs/` 根目录。
