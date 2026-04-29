@@ -7,6 +7,46 @@
 
 本文面向 Addon 测试工程师与技术负责人，重点总结如何让一次"取数据探针"在失败时直接落到正确的层（环境 / 路由 / 客户端 / 数据路径 / 产品语义），而不是把所有失败都归成"DB 出问题了"。
 
+## 先用白话理解这篇文档
+
+### 这篇文档解决什么问题
+
+测试报"DB 看不到数据"或"role 不对"时，团队第一反应通常是"DB 有 bug"。但这种归因经常错位——**同样的 stderr / 同样的"读不到结果"，可能根因在 5 个不同层**：
+
+1. **环境层**：CSI plugin 不 ready、kubelet 抖动、k3d 重启后 mount propagation 失效
+2. **路由层**：vcluster port-forward 没起来、Service Endpoint 还没刷新、11443 connection refused
+3. **客户端层**：valkey-cli / mysql 客户端 args 写错、密码 / TLS 配置不对、超时太短
+4. **数据路径层**：写发到了 secondary、replication lag、bounded eventually 没等到收敛
+5. **产品语义层**：role 真的是错的、replication contract 真破了、addon 代码有 bug
+
+笼统说"DB 出问题了"会让团队**在错误的层排障**：花 2 小时调 DB 配置，最后发现是 11443 listener 没起来。
+
+→ 真正的方法论是：**写探针时就给 5 层各自的 stderr / 退出码 / 区分信号，让每次 fail 自动落到正确的层**。
+
+### 何时本文方法论 apply
+
+| 场景 | 关键决策 |
+|---|---|
+| 写新 SQL exec 探针（`kubectl exec ... mysql ...`）| 给 client-error / TLS / route / 数据 5 层都有显式 stderr branch |
+| 写新 `kubectl get` 探针看 role / replication | 区分 "API 不可达" vs "对象状态" vs "字段值" |
+| 探针撞 fail 时 | 看 stderr 的 layer tag，**不要默认归 DB 层** |
+| Review 探针 PR | 第一道 check 是有没有 5 层各自的 fail 信号 |
+| post-restart 后探针 fail | 怀疑 layer 1（环境）或 layer 2（路由），跟 `addon-test-environment-gate-hygiene-guide.md` 7-layer 配合 |
+| OpsRequest Succeed 但探针 read empty | 怀疑 layer 4（数据路径，bounded eventually 没等到收敛），跟 `addon-bounded-eventual-convergence-guide.md` 配合 |
+
+### 读完你能做什么决策
+
+- **写新探针时**：能 5 秒内列出 5 层各自 stderr 应该是什么样
+- **探针 fail 时**：能立刻读 stderr 判断哪层错了，不再笼统归 DB
+- **review 探针 PR 时**：能识别"看起来 OK 但 fail 时不能分层"的探针并 block
+- **撞 transient fail 时**：能区分 "bounded eventually 没收敛" vs "真 fail"
+
+### 为什么独立成篇
+
+跟 `addon-test-environment-gate-hygiene-guide.md`（开跑前不踩雷）+ `addon-test-acceptance-and-first-blocker-guide.md`（跑完不混层）一起构成 "环境 → 探针 → 验收" 三阶段。本文聚焦**探针自身的实现规约**：探针应该长什么样、每层 fail 应该长什么样，是这一阶段的核心方法论。
+
+---
+
 ## 适用场景
 
 当你在写或维护以下探针时，本文适用：
