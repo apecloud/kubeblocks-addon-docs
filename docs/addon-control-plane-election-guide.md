@@ -427,4 +427,4 @@
 
 ## 相关案例
 
-- `docs/cases/mariadb/async-primary-election-syncer-control-plane-case.md`
+- [`docs/cases/mariadb/async-primary-election-syncer-control-plane-case.md`](cases/mariadb/async-primary-election-syncer-control-plane-case.md)
