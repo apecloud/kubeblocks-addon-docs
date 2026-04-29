@@ -1,5 +1,10 @@
 # Addon 测试探针分类与分层指南
 
+> **Audience**: addon test / TL
+> **Status**: stable
+> **Applies to**: any KB addon
+> **Applies to KB version**: any (test methodology, version-agnostic)
+
 本文面向 Addon 测试工程师与技术负责人，重点总结如何让一次"取数据探针"在失败时直接落到正确的层（环境 / 路由 / 客户端 / 数据路径 / 产品语义），而不是把所有失败都归成"DB 出问题了"。
 
 ## 适用场景

@@ -1,5 +1,10 @@
 # Addon Bounded Eventual Convergence 指南
 
+> **Audience**: addon dev / test / TL
+> **Status**: stable
+> **Applies to**: any KB addon
+> **Applies to KB version**: any (methodology, version-agnostic)
+
 本文面向 Addon 开发者、测试工程师和技术负责人，统一总结一个反复出现的根因模式：**对分布式异步收敛过程做单次 snapshot 判定**，几乎必然踩到中间态导致 false negative。
 
 修复模板永远是同一套：**bounded retry within reasonable window**。
