@@ -88,6 +88,8 @@
 - [`docs/addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md) — macOS bash 3.2 + `set -euo pipefail` 下 runner 的 7 个常见兼容坑（空数组、env-default 时机、单条 local 内互引用、`v\$parameter`、`local x=$(cmd)` 等）+ 自检清单
 - [`docs/addon-probe-script-fork-and-zombie-guide.md`](addon-probe-script-fork-and-zombie-guide.md) — addon probe / lifecycle 脚本里 fork 后台子进程在 kbagent / business 容器内累积 zombie 的两类机制：**Pattern A（显式 fork：`&` / nohup / setsid）** ~5-14/min 撞 pids.max；**Pattern B（隐式 timeout-kill orphan：pipeline / `$(...)` 子进程在 kbagent SIGKILL 父脚本时 orphan）**~0.04% probes 低速率但同 cell。统一 4D audit checklist（execution context × fork source × frequency × reaper）；valkey check-role.sh fix 验证（前 14/min → 后 0/min）+ mariadb #402 Pattern B 实证 + OceanBase audit pass scope carve-out
 - [`docs/addon-k3d-host-precheck-guide.md`](addon-k3d-host-precheck-guide.md) — 跑 smoke / chaos 之前先跑 host-level k3d precheck（API 可达性 + 延迟 + 集群 CPU/MEM 水位 + stuck 检测）。配套工具 `kubeblocks-tests/scripts/k3d-precheck.sh`（zsh，三档输出：表格 / JSON / quiet exit）；含 3 个 tooling 通用坑（k3d kubeconfig 0.0.0.0 / k3d v5 label 变更 `k3d.cluster` / macOS bash 3.2 限制）+ runner 集成 pre-hook + 三台测试机（Machine A/B/C）跨主机 ops profile baseline
+- [`docs/addon-probe-timeout-and-soft-failure-guide.md`](addon-probe-timeout-and-soft-failure-guide.md) — addon CmpD 内部 livenessProbe / readinessProbe 脚本的"信道层错 vs 产品层错"分层：客户端 rc!=0 一律 transient → exit 0；只有客户端成功返回 + 输出确认 bad state 才 exit 1；合法慢窗口用 pgrep 守门；含 7 条硬规则 + 反模式表 + 自检清单
+- [`docs/addon-paramdef-cue-range-validation-guide.md`](addon-paramdef-cue-range-validation-guide.md) — ParametersDefinition cue/tpl 数值参数范围必须用 practical_min/max（实测能启动），不是 doc_hard_min/max（理论可设）；schema 是 reconfigure 流程的守门；含 7 条硬规则 + 反模式表 + 自检清单 + boundary-1 验证流程
 
 ## 案例材料
 
@@ -112,6 +114,8 @@
 ### Oracle
 
 - [`docs/cases/oracle/oracle-chart-vs-kb-schema-skew-multi-stage-case.md`](cases/oracle/oracle-chart-vs-kb-schema-skew-multi-stage-case.md) — Oracle 1.0.0-alpha.0 chart 在已发布 KB 装不上的三段反转：先误判「整代代差」、再误判「chart 字段路径错位」、最后查清是「chart 跟 KB main 上未发布 API（PR #10100 / #10109）」。同仓 `release-1.0` 分支才是答案。属 [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](addon-chart-vs-kb-schema-skew-diagnosis-guide.md) 的工程现场补充
+- [`docs/cases/oracle/oracle-12c-post-switchover-probe-cascade-kill.md`](cases/oracle/oracle-12c-post-switchover-probe-cascade-kill.md) — reconfigure_deep Run 1→3 闭环：Bug #12 (DBCA 跑期间 liveness 误杀，initialDelay=600 + 90s 重启窗口) + Bug #13 (post-switchover 慢控制面 flap readiness)；3 layer fix（cmpd probe 参数 + liveness.sh 软失败 + checkDBStatus.sh best-effort dgmgrl）；Run 3 全 PASS + RESTARTS=0 实证；属 [`addon-probe-timeout-and-soft-failure-guide.md`](addon-probe-timeout-and-soft-failure-guide.md) 工程现场补充
+- [`docs/cases/oracle/oracle-12c-processes-cue-paramdef-range-case.md`](cases/oracle/oracle-12c-processes-cue-paramdef-range-case.md) — reconfigure_deep T22d FAIL：`processes: int & >=6` cue 太宽，10 通过 ValidatePhase → ORA-603/1092 → instance terminated → KB OpsRequest 卡 Running 25min+；fix `>=100` Run 3 验证生效（ValidatePhase reject within 10s）；属 [`addon-paramdef-cue-range-validation-guide.md`](addon-paramdef-cue-range-validation-guide.md) 工程现场补充
 
 ### Methodology
 
