@@ -2,11 +2,11 @@
 
 > **Audience**: addon dev / test
 > **Status**: stable
-> **Applies to**: Oracle addon on KubeBlocks（方法论可复用，参见 `addon-chart-vs-kb-schema-skew-diagnosis-guide.md`）
+> **Applies to**: Oracle addon on KubeBlocks（方法论可复用，参见 [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](../../addon-chart-vs-kb-schema-skew-diagnosis-guide.md)）
 > **Applies to KB version**: 验证于 KB 1.0.2 / 1.0.3-beta.5 / 1.1.0-beta.5；根因涉及 KB main 上未发布的 PR #10100 / #10109
 > **Affected by version skew**: reconfigure / parameters API 在 KB main 重构（ParamConfigRenderer 拆进 ParametersDefinition、reconfigure 路由到 ComponentParameter），预计随 KB 1.2 发布；reconfigure 接口的具体跨版本演进与写法迁移见 `addon-reconfigure-version-skew-guide.md`（TBD）
 
-本文是 `addon-chart-vs-kb-schema-skew-diagnosis-guide.md` 的工程现场补充。记录 2026-04-29 Oracle smoke 起点的三段反转，每段都被下一段推翻，最后才落到正确路径。每段都标了「当时被忽略的关键证据」与「应该走的最短路径」，便于后续 addon 第一次撞同类问题时跳过这些弯路。
+本文是 [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](../../addon-chart-vs-kb-schema-skew-diagnosis-guide.md) 的工程现场补充。记录 2026-04-29 Oracle smoke 起点的三段反转，每段都被下一段推翻，最后才落到正确路径。每段都标了「当时被忽略的关键证据」与「应该走的最短路径」，便于后续 addon 第一次撞同类问题时跳过这些弯路。
 
 ## 起点
 

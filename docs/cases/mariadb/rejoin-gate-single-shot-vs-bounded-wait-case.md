@@ -103,4 +103,4 @@ finalize_replication_rejoin_ready_gate() {
 
 - patch commit：`addons/mariadb/templates/cmpd-replication.yaml::finalize_replication_rejoin_ready_gate` + `Chart.yaml` 1.1.1-alpha.11
 - 任务串：#384 (T8 first observed) → #385 (alpha.11 验证 T8 PASS)
-- 主题文档：`addon-bounded-eventual-convergence-guide.md`、`addon-bootstrap-role-publish-guide.md`、`addon-test-acceptance-and-first-blocker-guide.md`
+- 主题文档：[`addon-bounded-eventual-convergence-guide.md`](../../addon-bounded-eventual-convergence-guide.md)、[`addon-bootstrap-role-publish-guide.md`](../../addon-bootstrap-role-publish-guide.md)、[`addon-test-acceptance-and-first-blocker-guide.md`](../../addon-test-acceptance-and-first-blocker-guide.md)

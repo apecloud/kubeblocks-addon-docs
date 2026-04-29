@@ -43,6 +43,6 @@
 
 这份摘要不是新的问题分析文档，只服务于一件事：
 
-- 给 `docs/cases/mariadb/cm1-dynamic-reload-case.md` 提供稳定证据入口。
+- 给 [`docs/cases/mariadb/cm1-dynamic-reload-case.md`](../cm1-dynamic-reload-case.md) 提供稳定证据入口。
 
 后续如果需要补更多现场摘录，应继续加在这份摘要里，而不是重新创建一份平行证据文档。

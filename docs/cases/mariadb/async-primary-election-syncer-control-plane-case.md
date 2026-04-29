@@ -12,7 +12,7 @@
 
 通用方法论已经上提到：
 
-- `docs/addon-control-plane-election-guide.md`
+- [`docs/addon-control-plane-election-guide.md`](../../addon-control-plane-election-guide.md)
 
 这不是要重新开启方向讨论的草稿，而是当前主线已经确认后的案例化基线。更准确地说，它是：
 

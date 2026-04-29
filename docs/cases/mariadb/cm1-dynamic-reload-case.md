@@ -2,7 +2,7 @@
 
 本文是 MariaDB 案例材料，不是通用 reconfigure 方法论文档。
 
-它记录一个已经闭环的最小案例：`CM1 / dynamic reload`。目标不是复述整条项目历史，而是给 Addon 开发者留下一个可复用的“症状 -> 根因 -> 修复点 -> 最小验证口径”样板。通用 reconfigure 经验应继续沉淀在 `docs/addon-reconfigure-guide.md`。
+它记录一个已经闭环的最小案例：`CM1 / dynamic reload`。目标不是复述整条项目历史，而是给 Addon 开发者留下一个可复用的“症状 -> 根因 -> 修复点 -> 最小验证口径”样板。通用 reconfigure 经验应继续沉淀在 [`docs/addon-reconfigure-guide.md`](../../addon-reconfigure-guide.md)。
 
 ## 结论先行
 
@@ -83,7 +83,7 @@
 - `/tmp/mariadb-min-cm1-recheck-20260421-180830.log`
 - `/tmp/mariadb-min-cm1-recheck-evidence-20260421-180830.txt`
 - `/tmp/mariadb-min-cm1-recheck-watcher-20260421-180830.tsv`
-- 稳定归档摘要：`docs/cases/mariadb/evidence/cm1-dynamic-reload-evidence-summary.md`
+- 稳定归档摘要：[`docs/cases/mariadb/evidence/cm1-dynamic-reload-evidence-summary.md`](evidence/cm1-dynamic-reload-evidence-summary.md)
 
 这些材料应足以支撑以下三件事：
 

@@ -49,4 +49,4 @@ cmpd 模板里 roleProbe 的 command 写的是 `["/bin/sh", "/scripts/..."]` 应
 
 - patch commit：`addons/mariadb/scripts/replication-roleprobe.sh` + `galera-roleprobe.sh` + `Chart.yaml` 1.1.1-alpha.10
 - 任务串：#379 → #380 → #381 → #382 → #383 → #384
-- 主题文档：`addon-bounded-eventual-convergence-guide.md`、`addon-test-probe-classification-guide.md`
+- 主题文档：[`addon-bounded-eventual-convergence-guide.md`](../../addon-bounded-eventual-convergence-guide.md)、[`addon-test-probe-classification-guide.md`](../../addon-test-probe-classification-guide.md)
