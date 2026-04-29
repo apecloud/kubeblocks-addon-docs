@@ -148,8 +148,8 @@ kubectl -n kb-system get pod -l app.kubernetes.io/managed-by=kubeblocks-dataprot
 
 ## 与其他文档的关系
 
-- `addon-test-environment-gate-hygiene-guide.md` 第 3 项「存储 / CSI 就绪层」与本文的 §1 互补：那篇讲 PVC 能不能 bind，本文讲 backup PV / VolumeSnapshot 能不能 work。
-- `addon-test-acceptance-and-first-blocker-guide.md` 强调 first blocker 分层；本文 §1/§2 是典型的「first blocker 落到环境层但表现得像产品层」例子。
+- [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) 第 3 项「存储 / CSI 就绪层」与本文的 §1 互补：那篇讲 PVC 能不能 bind，本文讲 backup PV / VolumeSnapshot 能不能 work。
+- [`addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md) 强调 first blocker 分层；本文 §1/§2 是典型的「first blocker 落到环境层但表现得像产品层」例子。
 
 ## 案例附录
 

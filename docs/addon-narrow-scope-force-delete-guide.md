@@ -108,9 +108,9 @@ kubectl get componentdefinition <cmpd-name>  # 应该 NotFound
 
 ## 与其他文档的关系
 
-- `addon-test-environment-gate-hygiene-guide.md` 第 6 项「fresh slot / no-tail 层」要求测试前现场干净；本文是当上一轮 cleanup 没收口时如何 recover。
-- `addon-test-host-stress-and-pollution-accumulation-guide.md` 讲 host 层污染累积；本文是其中一种 cleanup gate failure 的具体修法。
-- `addon-k3d-image-import-multiarch-workaround-guide.md` 处理「image pull 不动」根因；本文处理「image pull 中途被 cancel」的善后。
+- [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) 第 6 项「fresh slot / no-tail 层」要求测试前现场干净；本文是当上一轮 cleanup 没收口时如何 recover。
+- [`addon-test-host-stress-and-pollution-accumulation-guide.md`](addon-test-host-stress-and-pollution-accumulation-guide.md) 讲 host 层污染累积；本文是其中一种 cleanup gate failure 的具体修法。
+- [`addon-k3d-image-import-multiarch-workaround-guide.md`](addon-k3d-image-import-multiarch-workaround-guide.md) 处理「image pull 不动」根因；本文处理「image pull 中途被 cancel」的善后。
 
 ## 案例附录
 
