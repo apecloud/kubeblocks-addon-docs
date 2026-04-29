@@ -1,5 +1,10 @@
 # Addon Evidence Discipline — 不要把动机假设、N=1 样本、间接旁证升格为硬结论
 
+> **Audience**: addon dev / test / TL
+> **Status**: stable
+> **Applies to**: any KB addon
+> **Applies to KB version**: any (methodology, version-agnostic)
+
 属于：方法论主题文档（不绑定单一引擎）。
 
 ## 1. 这篇要解决的问题

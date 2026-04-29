@@ -1,5 +1,10 @@
 # Addon 测试验收与 First Blocker 分层指南
 
+> **Audience**: addon dev / test / TL
+> **Status**: stable
+> **Applies to**: any KB addon
+> **Applies to KB version**: any (test methodology, version-agnostic)
+
 本文面向 Addon 开发者、测试工程师和技术负责人，重点总结如何定义测试成功语义、如何收 first blocker，以及如何避免把环境、测试口径和产品缺陷混写。
 
 ## 适用场景
