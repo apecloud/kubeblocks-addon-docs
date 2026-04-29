@@ -87,4 +87,4 @@ if (allowed_recovery_gap) {
 
 - patch commit：见 `mariadb/lib/common.sh` `git diff` 引入 `post_gap_reconverged_*`
 - 任务串：#377 → #378 → #379（Phase 2m → 2n → 2o）
-- 主题文档：`addon-test-acceptance-and-first-blocker-guide.md`、`addon-test-probe-classification-guide.md`、`addon-test-environment-gate-hygiene-guide.md`
+- 主题文档：[`addon-test-acceptance-and-first-blocker-guide.md`](../../addon-test-acceptance-and-first-blocker-guide.md)、[`addon-test-probe-classification-guide.md`](../../addon-test-probe-classification-guide.md)、[`addon-test-environment-gate-hygiene-guide.md`](../../addon-test-environment-gate-hygiene-guide.md)

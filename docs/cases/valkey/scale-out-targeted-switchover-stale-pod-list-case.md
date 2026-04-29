@@ -1,6 +1,6 @@
 # 案例：Valkey scale-out 后 targeted switchover 因 stale POD_FQDN_LIST 误判
 
-主题文档：`docs/addon-switchover-guide.md`，原则 7 "action 脚本里遍历的 member list 不能只信容器静态 env"。本文只记录 Valkey addon 的具体表现、修复实现、shellspec 覆盖范围，引擎无关结论请回主题文档。
+主题文档：[`docs/addon-switchover-guide.md`](../../addon-switchover-guide.md)，原则 7 "action 脚本里遍历的 member list 不能只信容器静态 env"。本文只记录 Valkey addon 的具体表现、修复实现、shellspec 覆盖范围，引擎无关结论请回主题文档。
 
 ## 现场信号
 
