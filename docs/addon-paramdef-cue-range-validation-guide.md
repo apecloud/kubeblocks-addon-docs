@@ -1,6 +1,31 @@
 # Addon ParametersDefinition cue/tpl 数值范围设法指南
 
+> **Audience**: addon dev / TL
+> **Status**: stable
+> **Applies to**: any KB addon（任何用 ParametersDefinition cue/tpl 等 schema 定义参数的引擎）
+> **Applies to KB version**: 1.0.x / 1.1.x / main (1.2 unreleased) — schema 守门责任跨版本一致；本文方法论 version-agnostic
+> **Affected by version skew**: KB main 上的 reconfigure / parameters API 重构（PR #10100 / #10109）影响 ValidatePhase 信号链路，不影响 schema range 设法本身；reconfigure 接口的具体跨版本演进见 [`addon-reconfigure-version-skew-guide.md`](addon-reconfigure-version-skew-guide.md)（TBD，单独 PR 跟进）
+
 本文面向 Addon 开发工程师，重点解决 ParametersDefinition（cue / tpl 等 schema）里数值参数的范围（lower bound / upper bound）应该按什么标准来设。错误设法的代价是：**用户可以提交一个通过 schema 但实际无法启动 DB 的值，引发 OpsRequest 卡死、cluster 卡 Updating 死循环、需要手工 fresh restart 的 incident**。
+
+## 先用白话理解这篇文档
+
+### 这篇文档解决什么问题
+
+你写新 addon 的第一份 ParametersDefinition 时，第一直觉是查官方文档「这个参数的最小值是多少」，写进 cue：`processes: int & >=6`。**这条直觉在数据库参数上几乎必然踩坑**：官方文档的 hard min 是"spfile parser 接受的下限"（理论可设），不是"DB 能起来的下限"（实际可启动）。差距常常 1~2 个数量级——Oracle `processes` hard_min=6 但 practical_min ~100。用户合法地用文档允许的值，被你的 addon 害死。
+
+正确的 reframe 是：**schema 是 reconfigure 流程的守门**。它的责任不是"recommend 最佳实践"，而是"把会让 DB 起不来的值挡在 ValidatePhase"。`practical_min / practical_max` 必须经过启动验证（用边界值起一遍 DB），不是抄文档。同时定 lower 和 upper（防资源耗尽）；跨大版本 split cue（不要假设 12c 的 practical 跟 23c 一样）。
+
+### 读完你能做什么决策
+
+- **写新 addon 第一份 ParametersDefinition 时**：知道每一个 `int & >=N` 都要回答"N 是 hard 还是 practical"，hard 的全部要重测改 practical
+- **跨版本升级 addon 时**：知道 12c→23ai / MySQL 5.7→8.0 / PG N→N+1 大版本，hard/practical 边界都要重做实测
+- **收 reconfigure cluster 卡 Running / OpsRequest 卡 Running 类 incident 时**：先排查 schema 是否放进了 practical_min 以下的值，schema 漏掉再补 KB OpsRequest 没救
+- **review PR 时**：用 7 条硬规则 + 自检清单对照（boundary-1 negative test 必须有；upper 必须配套；schema vs default vs recommended 三者职责分明）
+
+### 为什么独立成篇
+
+ParametersDefinition schema 这件事看似是小尺寸的"边界值微调"，但它是 reconfigure 整个流程的**输入侧守门**——schema 没守住，KB OpsRequest 当前没有"DB 起不来超时"兜底，会卡 Running 几十分钟没法回滚，唯一恢复路径是 fresh restart。这条"schema 漏掉一个值 → 几十分钟 incident"的强放大效应，让它必须独立成篇。它跟 [`addon-reconfigure-guide.md`](addon-reconfigure-guide.md)（reconfigure 流程整体）和 `addon-reconfigure-version-skew-guide.md`（跨版本演进，TBD）scope 完全不同——前者是流程，后者是版本，本文专讲输入 schema 的守门责任。
 
 ## 适用场景
 

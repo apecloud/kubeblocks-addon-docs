@@ -1,6 +1,31 @@
 # Addon Probe 超时与软失败语义指南
 
-本文面向 Addon 开发工程师与技术负责人，重点解决"K8s `livenessProbe` / `readinessProbe` 的快速二态语义" 与 "数据库控制面慢但合法响应" 之间的张力。它不是关于测试探针（参见 `addon-test-probe-classification-guide.md`），而是关于**addon 在 CmpD 里挂的探针脚本怎么写、参数怎么设，才不会在合法的慢窗口里把容器误杀**。
+> **Audience**: addon dev / TL
+> **Status**: stable
+> **Applies to**: any KB addon（被 CmpD 挂上 `livenessProbe` / `readinessProbe` 的所有引擎）
+> **Applies to KB version**: any（K8s probe contract 在 KB 各版本下行为一致；本文方法论 version-agnostic）
+> **Affected by version skew**: 不受 KB 版本影响 — 探针由 K8s kubelet 直接触发，跨 KB 1.0.x / 1.1.x / main 行为一致
+
+本文面向 Addon 开发工程师与技术负责人，重点解决"K8s `livenessProbe` / `readinessProbe` 的快速二态语义" 与 "数据库控制面慢但合法响应" 之间的张力。它不是关于测试探针（参见 [`addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md)），而是关于**addon 在 CmpD 里挂的探针脚本怎么写、参数怎么设，才不会在合法的慢窗口里把容器误杀**。
+
+## 先用白话理解这篇文档
+
+### 这篇文档解决什么问题
+
+你写一个数据库 addon 时，第一直觉是把"DB 起来了吗"翻译成 sqlplus / mysql / redis-cli 一句查询，rc 非 0 就 `exit 1`。**这条直觉在 K8s probe 上几乎必然踩坑**：DB 控制面在合法的 switchover / reconfigure / DBCA / RMAN 期间天然会有几十秒级慢响应，client 一个 timeout 触发 `exit 1` 累计三次就 SIGKILL，容器一旦在错误时机被 kill 又会引发 control file 损坏 → 重启更慢 → 再被 kill → cascade。
+
+正确的 reframe 是：**rc!=0 是"信道层错"，不是产品层错**。client timeout / connection refused / ORA-1034 / 短暂 reject 都是信道现象，不能升格成"DB 不可用"。只有客户端成功返回 + 输出**明确**确认 bad state，才算 product-layer fail。再加一层 pgrep 守门已知合法慢窗口（DBCA / setup_dg / orapwd），把整个 cascade 链断在源头。
+
+### 读完你能做什么决策
+
+- **写新 addon 的 livenessProbe / readinessProbe 脚本时**：知道每一行 rc 处理对应"信道还是产品"，避免把所有 rc!=0 都翻译成 fail
+- **debug 容器 RESTARTS 高 / readiness flap 现象时**：知道先排查"信道层错被升格"假阳性，再去查 DB 真挂没挂
+- **设 cmpd.yaml probe 参数时**：知道 `initialDelaySeconds` / `periodSeconds` / `timeoutSeconds * failureThreshold` 三件套要按"最慢的合法窗口"反推
+- **review 同事 PR 时**：能用 7 条硬规则 + 反模式表对照检查，避免再造同类 cascade
+
+### 为什么独立成篇
+
+probe 写法这件事看似只是脚本细节，但它是 KB lifecycle 收敛的命门：probe fail 会通过 `RuntimeReady` 阻断 memberJoin / hscale / reconfigure 等所有 lifecycleAction，引发整套 cluster 卡 Updating。这条 cascade 链贯穿"脚本 → cmpd.yaml 参数 → KB controller 状态机"三层，任何一层埋的错都会通过同一通道放大，所以适合放一篇集中讲。它跟 [`addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md)（test 侧探针失败分层）名字相像但 scope 完全不同——前者是 addon 内部探针**怎么写**，后者是测试 fail **怎么归类**。
 
 ## 适用场景
 
