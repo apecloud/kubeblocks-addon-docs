@@ -31,7 +31,6 @@
 - [`docs/addon-k3d-image-import-multiarch-workaround-guide.md`](addon-k3d-image-import-multiarch-workaround-guide.md) — k3d 节点拉 docker.io 超时（host 拉得动）的 host-side `docker save` + 节点 `ctr import` 注入路径；同时绕开 `k3d image import` 在 multi-arch manifest 上的静默 bug
 - [`docs/addon-k3d-backup-restore-prereqs-guide.md`](addon-k3d-backup-restore-prereqs-guide.md) — k3d 上跑 KB Backup/Restore 的两层环境前置：装 VolumeSnapshot CRD（让 dataprotection controller 起来）+ 建默认 BackupRepo（让 Backup CR 不再 NoDefaultBackupRepo），引擎无关
 - [`docs/addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md) — macOS bash 3.2 + `set -euo pipefail` 下 runner 的 7 个常见兼容坑（空数组、env-default 时机、单条 local 内互引用、`v\$parameter`、`local x=$(cmd)` 等）+ 自检清单
-- [`docs/kubeblocks-docs-dev-troubleshooting.md`](kubeblocks-docs-dev-troubleshooting.md) — kubeblocks-docs 本地 dev server 排障（`.next` 缓存损坏 → `layout.tsx` 500）
 
 ## 案例材料
 
