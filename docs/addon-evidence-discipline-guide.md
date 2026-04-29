@@ -92,7 +92,7 @@
 
 具体反例放在 `docs/cases/<engine>/` 或 `docs/cases/methodology/` 下，作为这篇通用方法论的实证补充。当前已有：
 
-- `docs/cases/methodology/evidence-inflation-in-csi-durability-debate-case.md`（待写：04-28 MariaDB Round 2-replacement debate 中的 3 次推过头与 3 次撤回）
+- [`docs/cases/methodology/evidence-inflation-in-csi-durability-debate-case.md`](cases/methodology/evidence-inflation-in-csi-durability-debate-case.md) — 04-28 MariaDB #396 CSI durability 讨论中的 3 次 inflation 与 3 次撤回（动机 narrative / N=1→average / 间接旁证→系统性证伪）
 
 ## 7. 给后续 addon 工程师的固化要求
 

@@ -88,4 +88,4 @@
 
 ## 案例附录
 
-- MariaDB：[`docs/cases/mariadb/test-probe-classification-case.md`](cases/mariadb/test-probe-classification-case.md)（待补：T4 SQL 探针 / R4 role 探针 / T13 expose / exporter 各自的字段集与触发条件）
+- MariaDB：TBD — 计划补 T4 SQL 探针 / R4 role 探针 / T13 expose / exporter 各自的字段集与触发条件（先不放 broken link，等 case 文件建好后再 link）
