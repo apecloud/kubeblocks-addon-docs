@@ -5,6 +5,53 @@
 > **Applies to**: any KB addon
 > **Applies to KB version**: any (methodology, version-agnostic)
 
+## 先用白话理解这篇文档
+
+### 你之前可能这么想
+
+写一段 helper 检查分布式状态，思路通常是：
+- "我做完了 START SLAVE 这个动作，下一句直接读 slave_status，看 IO/SQL 是否 Yes/Yes 就行了"
+- "我做完了 OpsRequest，立刻读 cluster role label 看哪个 pod 是 secondary"
+- "我做完了 reconfigure，直接读 `SHOW GLOBAL VARIABLES` 看新值生效没"
+
+逻辑像是过程式编程：动作 → 后果立刻可见 → 判定。
+
+### 这种思路在 K8s + 数据库这类系统里几乎必然踩坑
+
+K8s + 数据库 addon 里**几乎所有状态都是异步收敛的**：
+- START SLAVE 是 client 命令；IO 线程要几秒去连 master，SQL 线程更晚开始 apply relay log
+- OpsRequest controller 标记完成后，role label 还要等 reconcile 链走完才贴
+- Reconfigure 后，runtime 配置可能要等 mariadbd refresh 几秒才生效
+- 任何 pod 重建后，新 pod 的 role / endpoint / route 全部要等 K8s 控制面 publish 链一步步走完
+
+也就是说**做完动作的瞬间读出来的字段，大概率是中间态**。中间态 → false negative → 测试 fail。这里的 fail 看起来像产品 bug，实际是 helper 在错误时刻读了状态。
+
+### 正确 reframe
+
+**对异步收敛系统做判定 = bounded retry within reasonable window**。不是单次读，是有限多次读 + 见到收敛态就退出 + 超时才 fail。这条规则在测试 helper 和 addon 业务代码（如 bootstrap / rejoin gate）两侧都适用。
+
+### 什么时候应该 reach 这篇
+
+- **写 helper 判定状态时**：看到 single shot read（一次读、立刻判定）就先停下来确认上游状态是同步还是异步收敛
+- **判 first blocker 时**：看到 "complete" 类信号（`OpsRequest Succeed` / `Slave_IO=Yes`）后立刻报 fail，先确认 helper 是不是单次读
+- **写 RCA / debug 时**：撞到看似间歇性 fail 时，第一个怀疑就是单次 snapshot 撞中间态
+- **写 bootstrap / rejoin / reconfigure 类 addon 业务代码时**：任何"做完一个动作立刻判定后果"的地方都要 bounded retry
+
+### 读完这篇你能做什么
+
+- 识别 "对异步收敛系统做单次 snapshot" 这类反模式（5 个真实反模式表）
+- 用通用模板写 bounded retry 函数
+- 区分**应该重试 vs 应该立即 bail** 的状态分类（保护真实产品 mismatch 不被 retry 掩盖）
+- 7 条硬规则做 self-check
+
+### 为什么独立成篇
+
+- **方法论级别**：不绑定特定 phase（reconfigure / switchover / chaos 都用得上），不绑定特定引擎
+- **跨 helper / 业务代码两侧通用**：测试 helper 用同一套，addon bootstrap / rejoin gate 也用同一套
+- 与 [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) 互补 —— evidence-discipline 是"对自己的结论 bounded retry"（向内），bounded-eventual-convergence 是"对外部状态 bounded retry"（向外），两套同源不同 subject
+
+## 主体
+
 本文面向 Addon 开发者、测试工程师和技术负责人，统一总结一个反复出现的根因模式：**对分布式异步收敛过程做单次 snapshot 判定**，几乎必然踩到中间态导致 false negative。
 
 修复模板永远是同一套：**bounded retry within reasonable window**。

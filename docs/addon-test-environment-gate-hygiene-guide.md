@@ -1,5 +1,56 @@
 # Addon 测试环境 Gate 卫生指南
 
+> **Audience**: addon test engineer / TL
+> **Status**: stable
+> **Applies to**: any KB addon
+> **Applies to KB version**: any (k3d/vcluster/host layer，跟 KB 版本不耦合)
+
+## 先用白话理解这篇文档
+
+### 你之前可能这么想
+
+测试 runner 起来跑 smoke。第一步 "T1 创建集群" 失败了。先反应是 "addon 有 bug 没启动好"，开始查 addon code / DB pod log。结果查了半天发现：
+- PVC 永远 Pending
+- 镜像 ImagePullBackOff
+- vcluster `127.0.0.1:11443` listener 不在
+- csi-hostpathplugin 跑着但 1/4 Ready
+
+**addon code 完全无辜**，是测试环境层在异响。
+
+### 这种思路的代价
+
+排障时间从 "5 分钟看完 DB log" 拖成 "半天 trace controller 全栈"。**first blocker 落到了错误的层**。报告写"产品 fail"，实际是环境 fail；下次同样症状别人又踩同样的坑。
+
+特别危险的场景：**机器/容器重启之后**。CSI mount propagation 漂回 private、kubelet 根路径权限改了、镜像缓存被 GC、port-forward 进程死了 —— 任何一条都让 T1 timeout 但 addon log 完全干净。
+
+### 正确 reframe
+
+**测试环境就绪本身要当成证据收一遍**，不是默认信任。在 runner 跑起来之前，每一层（路由/控制面/CSI/镜像分发/staged anchors/fresh slot/capability）都坐实一次，留下时间戳证据。
+
+post-restart 场景里这条最关键：**禁止复用 pre-restart 的任何事实**。"昨天能跑就今天能跑" 是错觉。
+
+### 什么时候应该 reach 这篇
+
+- **跑任何 smoke / chaos / regression 之前**：环境就绪走一次 7-layer gate
+- **测试机重启 / Docker 重启 / k3d 集群被动恢复之后**：所有 pre-restart 事实作废重收
+- **看到 T1 timeout 但拿不到 DB 层证据**：先怀疑 gate，不怀疑产品
+- **判 first blocker 时**：分清"产品 fail"vs"环境 fail"vs"测试 fail" 三层
+
+### 读完这篇你能做什么
+
+- 7-layer gate checklist 在 runner 启动前逐项坐实
+- 写 gate 的 source-of-truth 文件结构（route_action / route_rc / image_sha / pod_image 等）
+- post-restart 场景的 reseat 步骤（特别是 CSI 的 mount propagation rshared 重设）
+- 把"环境就绪"作为 first-class testable artifact，不让它当 silent default
+
+### 为什么独立成篇
+
+- **gate 作用域只在测试 runner 启动前**：跟产品语义、first blocker 分层、stress profile 等是不同 phase 的 concern
+- **跨引擎复用**：mariadb / valkey / oracle 的 gate 流程一致，不绑定单一引擎实现
+- 与 [`addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md) 互补 —— first-blocker guide 处理 runner **跑起来之后**的 first blocker 分层，gate-hygiene 处理 runner **跑起来之前**的就绪坐实，两者顺序衔接
+
+## 主体
+
 本文面向 Addon 测试工程师与技术负责人，重点解决"机器/容器重启之后、跑测试之前，测试环境本身能不能用"的问题。它不是关于产品 / addon 的成功语义，而是关于**让 first blocker 不要落在测试环境本身**。
 
 ## 适用场景
