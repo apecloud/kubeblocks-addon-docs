@@ -2,6 +2,35 @@
 
 本文面向 KubeBlocks Addon 开发者，重点总结 switchover / failover 生命周期动作中的设计原则、幂等性语义、常见坑。引擎相关内容只放在案例附录中。
 
+## 先用白话理解这篇文档
+
+### 这篇文档解决什么问题
+
+写 switchover action 时，最容易踩的不是"切换没成功"，而是"看起来切换成功，但 controller 重试一次后集群状态错了"。
+
+新读者通常会把 switchover 当成一个原子操作来写：调用 → DB promote → 返回 success。但**真实运行中 switchover 不是原子的**：候选 pod 已进入新角色，旧 pod 还没退出旧角色，sentinel/coordinator 拓扑缓存还没刷新，controller 又来重试一次。
+
+这时候 "再次调用" 的语义不是实现细节而是产品语义：
+- 如果脚本第二次调用直接 fail（"我已经切了，再切就是错的"），controller 会把这条解读成产品 fail
+- 如果第二次调用直接 silent success（"已经在那个状态了，啥也不做"），controller 也可能错过收敛信号、放过未到位的状态
+
+→ 真正问题是：**先把 success / unknown / error 三态语义定清楚，再写代码**，否则 race / 重试 / 双调用都会把集群推到歪状态。
+
+### 读完你能做什么决策
+
+- **设计 switchover action 时**：先定义三态边界，再决定脚本返回什么（chapter "先定义成功语义" + 原则 1-2）
+- **判 controller 双调用语义时**：用状态语义还是因果语义？不同选择决定整个错误处理树（chapter "两种常见语义"）
+- **写收敛校验时**：什么时候依赖 DB 拓扑 truth、什么时候依赖外部协调器，不要混层（原则 3 + 原则 6）
+- **写测试时**：必须覆盖"切换中途态"（candidate 已升 / 旧 master 未降的窗口），不能只测起始 + 终态（原则 4）
+- **写脚本里 member list 遍历时**：知道容器静态 env（如 `VALKEY_POD_FQDN_LIST`）跨 scale 不刷新；fresh scale-out candidate 不在 list 里（原则 7，Valkey #2609 case）
+
+### 为什么独立成篇
+
+switchover 跟 reconfigure / TLS / backup 等主题完全独立。它的核心问题是**幂等语义**，不是 reload 路径或安全边界。把这一类经验集中放一篇，避免新读者在多个 doc 之间拼凑。
+
+具体引擎实现（Valkey switchover.sh / Redis redis-switchover.sh / MySQL semi-sync 等）只放在案例附录里，正文是引擎无关的方法论。
+
+---
 
 ## 适用场景
 
@@ -234,7 +263,9 @@ value=$(get_role ...)
 
 ### 原则 1：先定成功语义，再谈幂等实现
 
-不要直接写“看到 candidate 已是 master 就 return 0”。先明确：
+**何时适用**：开始写新 switchover/failover action 脚本时；review PR 看到"判到 candidate 是 master 就 return 0"这类直接实现时。
+
+不要直接写"看到 candidate 已是 master 就 return 0"。先明确：
 
 - 你们接受哪种成功语义；
 - 需要什么最低限度的拓扑收敛证明；
@@ -242,25 +273,37 @@ value=$(get_role ...)
 
 ### 原则 2：未知状态应与错误状态分开处理
 
+**何时适用**：写错误处理树的时候；遇到 timeout / 短时连接断开 / 探测不到角色时；写 retry 逻辑时。
+
 探测不到角色、短时 timeout、缓存未刷新，不等于角色非法。
 
 ### 原则 3：幂等 success 不能没有收敛保护
 
+**何时适用**：写 "重复调用幂等 return 0" 这条 path 时；判第二次 / 第三次 controller retry 应该返回什么时。
+
 重复调用可以成功，但 success 不应完全无条件。
 
-### 原则 4：race condition 测试必须覆盖“中途切换”
+### 原则 4：race condition 测试必须覆盖"中途切换"
+
+**何时适用**：写 ShellSpec / 单元测试时；review 测试覆盖率时；某个 race fix 修完后想验证不引入回归时。
 
 否则你可能修掉一种假失败，却引入另一种误判。
 
 ### 原则 5：shell 测试要警惕 subshell 语义
 
-涉及 `$()`、管道、子进程时，不要用普通 shell 变量模拟多轮状态机。
+**何时适用**：写 ShellSpec mock 时；mock function 配合 `$(...)` / 管道使用时；想"用 shell 变量计数 mock 被调用次数"时。
+
+涉及 `$()`、管道、子进程时，不要用普通 shell 变量模拟多轮状态机；用 `/tmp/<test-marker>.$$` 这种文件状态。
 
 ### 原则 6：不要把 Service 路由收敛放进 action critical path
+
+**何时适用**：设计 switchover action 的成功条件时；考虑"是否要等 primary Service Endpoint 切到新 primary 才返回 success"时。
 
 switchover action 应以 DB 拓扑切换成功为核心成功条件。primary Service / Endpoint 路由收敛可以作为 post-check、诊断或控制面最终一致性条件；除非产品 contract 明确要求，否则不要让 action 因 Service route 尚未收敛而失败。
 
 ### 原则 7：action 脚本里遍历的 member list 不能只信容器静态 env
+
+**何时适用**：写遍历 `<ENGINE>_POD_FQDN_LIST` / `<ENGINE>_POD_NAME_LIST` 这类 member list 的脚本时；scale-out 后立即触发 targeted switchover 的场景；OpsRequest 报"未确认 new primary"但 sentinel / 协调器视角已切换时。
 
 很多 addon 的 switchover / failover / replicate-priority / re-register 类脚本会遍历一个由控制面注入的 pod 成员列表，例如：
 
