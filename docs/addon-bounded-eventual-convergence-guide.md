@@ -32,10 +32,13 @@ K8s + 数据库 addon 里**几乎所有状态都是异步收敛的**：
 
 ### 什么时候应该 reach 这篇
 
-- **写 helper 判定状态时**：看到 single shot read（一次读、立刻判定）就先停下来确认上游状态是同步还是异步收敛
-- **判 first blocker 时**：看到 "complete" 类信号（`OpsRequest Succeed` / `Slave_IO=Yes`）后立刻报 fail，先确认 helper 是不是单次读
-- **写 RCA / debug 时**：撞到看似间歇性 fail 时，第一个怀疑就是单次 snapshot 撞中间态
-- **写 bootstrap / rejoin / reconfigure 类 addon 业务代码时**：任何"做完一个动作立刻判定后果"的地方都要 bounded retry
+| 场景 | 关键决策 |
+|---|---|
+| 写新 helper 验证 replication / role / data / 端点 / 配置 | 默认 bounded retry，单次 snapshot 是 anti-pattern |
+| 写 addon 业务代码（bootstrap / rejoin / reconfigure / Probe / Action 后判定） | addon 内部判定面踩同一类反模式，必须 bounded retry |
+| 撞 false-negative 现场分析 | 第一个怀疑：是不是单次 snapshot 撞中间态 |
+| review 别人的 helper / addon 代码 | 第一道 check：有没有 bounded retry 还是 single shot |
+| 写 RCA / 给 reviewer DM | 推断"产品 fail" 之前先排除 bounded retry 缺失 |
 
 ### 读完这篇你能做什么
 
