@@ -188,7 +188,7 @@ DRY_RUN=1 /bin/bash -euo pipefail run-tests.sh -t smoke
 
 ## 与其他文档的关系
 
-- `addon-test-environment-gate-hygiene-guide.md` 第 5 项「测试 runner / 锚点 staged 层」要求 runner 静态绿（`bash -n` + `git diff --check`）；本文给那一步具体能撞到的坑。
+- [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) 第 5 项「测试 runner / 锚点 staged 层」要求 runner 静态绿（`bash -n` + `git diff --check`）；本文给那一步具体能撞到的坑。
 
 ## 案例附录
 

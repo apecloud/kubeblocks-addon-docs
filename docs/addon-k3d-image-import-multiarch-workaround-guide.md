@@ -88,8 +88,8 @@ kubectl -n <ns> get pod
 
 ## 与其他文档的关系
 
-- `addon-test-environment-gate-hygiene-guide.md` 第 4 项「镜像分发层」就是本文话题；本文给具体修法。
-- `addon-k3d-kubeconfig-loopback-fix-guide.md` 处理同一类「k3d 默认配置在测试环境踩坑」的另一面（kubeconfig 寻址）。
+- [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) 第 4 项「镜像分发层」就是本文话题；本文给具体修法。
+- [`addon-k3d-kubeconfig-loopback-fix-guide.md`](addon-k3d-kubeconfig-loopback-fix-guide.md) 处理同一类「k3d 默认配置在测试环境踩坑」的另一面（kubeconfig 寻址）。
 
 ## 案例附录
 

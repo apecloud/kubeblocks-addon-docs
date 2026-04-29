@@ -93,8 +93,8 @@ kubectl cluster-info
 
 ## 与其他文档的关系
 
-- `addon-test-environment-gate-hygiene-guide.md` 第 1 项「API / 路由层」就包含 kubeconfig listener；本文是其中最常见的一种 first blocker 的具体修法。
-- `addon-k3d-image-import-multiarch-workaround-guide.md` 处理同一类「k3d 默认配置在测试环境踩坑」的另一面（image 分发）。
+- [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) 第 1 项「API / 路由层」就包含 kubeconfig listener；本文是其中最常见的一种 first blocker 的具体修法。
+- [`addon-k3d-image-import-multiarch-workaround-guide.md`](addon-k3d-image-import-multiarch-workaround-guide.md) 处理同一类「k3d 默认配置在测试环境踩坑」的另一面（image 分发）。
 
 ## 案例附录
 
