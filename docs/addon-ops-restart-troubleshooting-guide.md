@@ -497,4 +497,4 @@
 
 ## 相关主题
 
-- `docs/addon-componentdefinition-upgrade-guide.md`
+- [`docs/addon-componentdefinition-upgrade-guide.md`](addon-componentdefinition-upgrade-guide.md)

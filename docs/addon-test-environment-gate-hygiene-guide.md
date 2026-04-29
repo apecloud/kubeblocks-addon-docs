@@ -115,8 +115,8 @@ post_restart_gate():
 
 ## 与其他文档的关系
 
-- `addon-test-acceptance-and-first-blocker-guide.md` 讲"测试要看到什么算成功 / 哪一层算 first blocker"。
-- `addon-test-probe-classification-guide.md` 讲"探针失败如何分到正确的层"。
+- [`addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md) 讲"测试要看到什么算成功 / 哪一层算 first blocker"。
+- [`addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md) 讲"探针失败如何分到正确的层"。
 - 本文讲"测试还没开始之前，环境就绪要逐项坐实，避免 first blocker 落到环境却被误归产品层"。
 
 三者串起来：本文负责"开跑前不踩雷" → 探针分类负责"跑中失败不误归" → 测试验收负责"跑完结论不混层"。

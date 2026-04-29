@@ -1037,8 +1037,8 @@ Valkey R08b 验证的是静态参数变更是否会触发 rolling restart。
 
 switchover / failover / 幂等性问题已拆到独立文档，避免与 reconfigure 主轴混在一起：
 
-- `docs/addon-switchover-guide.md`
-- `docs/addon-tls-guide.md`
+- [`docs/addon-switchover-guide.md`](addon-switchover-guide.md)
+- [`docs/addon-tls-guide.md`](addon-tls-guide.md)
 
 如果关注的是：
 
@@ -1050,7 +1050,7 @@ switchover / failover / 幂等性问题已拆到独立文档，避免与 reconfi
 
 请直接查看该文档。
 
-如果关注的是 TLS 开启、TLS-only 强制、明文拒绝、证书挂载、TLS 与其他能力组合验证，请查看 `docs/addon-tls-guide.md`。
+如果关注的是 TLS 开启、TLS-only 强制、明文拒绝、证书挂载、TLS 与其他能力组合验证，请查看 [`docs/addon-tls-guide.md`](addon-tls-guide.md)。
 
 ## 用最小性验证确认哪些 reconfigure 防护不能省
 
