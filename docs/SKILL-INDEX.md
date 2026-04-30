@@ -31,6 +31,7 @@
 
 - [`addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md) — 成功语义分层、first blocker 分层、validation-only gate 身份固定、现场冻结
 - [`addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md) — 探针失败分到 `route_api` / `<client>_<channel>` / `empty_output` / `parse_empty` / `runtime_mismatch` / `real_*_mismatch` 等正确层
+- [`addon-test-dg-helper-completeness-guide.md`](addon-test-dg-helper-completeness-guide.md) — 多步骤异步操作的 test helper 必须用 multi-gate 和 unfakeable observable invariant，避免单一状态字符串在中间态提前返回成功
 - [`addon-bounded-eventual-convergence-guide.md`](addon-bounded-eventual-convergence-guide.md) — 异步收敛系统的状态判定必须 bounded retry，禁止单次 snapshot 当结论 *(also relevant in: 设计 / 开发新 addon — addon 启动 / rejoin / reconfigure 后的判定面)*
 - [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) — 对自己产出的结论也做 bounded retry：N=1→"average" / 间接旁证→"系统性证伪" / 动机假设→narrative inflation 三类反模式
 - [`addon-design-contract-review-during-xp-guide.md`](addon-design-contract-review-during-xp-guide.md) — XP 模式 review 阶段的 "design-contract challenge" checklist：8 类常见设计契约级缺陷（静默 fallback / 非空字段未强制 / 同 commit state 不连续 / sentinel 值传错误 / 条件清理状态枚举不穷尽 / NotFound 短路写入 / terminating vs absent 不区分 / 运算符优先级陷阱），每类含 review 模式 + 修法
@@ -58,6 +59,7 @@
 写测试基础设施 / shell helper / 跨平台 portability：
 
 - [`addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md) — macOS bash 3.2 + `set -euo pipefail` 下 7 个常见兼容坑（空数组、env-default 时机、`local x=$(cmd)` 等）
+- [`addon-test-runner-cadence-discipline-guide.md`](addon-test-runner-cadence-discipline-guide.md) — 长时 runner 操作期间的固定节奏汇报纪律；cadence 是操作者义务，触发器必须独立于 runner 进程
 
 ### 跨场景方法论（reusable framework）
 
