@@ -243,6 +243,10 @@ do_maintenance >&2   # stderr，kbagent 抓走
 - bootstrap 期 role 发布 vs role probe 见 [`docs/addon-bootstrap-role-publish-guide.md`](addon-bootstrap-role-publish-guide.md)。
 - ship-readiness 测试矩阵能否暴露这类长寿现象的 caveat 见 [`docs/addon-ship-readiness-multi-phase-validation-guide.md`](addon-ship-readiness-multi-phase-validation-guide.md)。
 
+## 配套案例
+
+- [`docs/cases/mariadb/mariadb-fork-audit-pass-negative-case.md`](cases/mariadb/mariadb-fork-audit-pass-negative-case.md) — MariaDB addon 4 处 fork pattern 都落"低频 + non-reaper"格 audit pass 的 negative case，作为本文 audit checklist 二维表的对照例子（不是所有 fork 都 leak）
+
 ## 案例附录：Valkey check-role.sh 的 zombie 漏洞
 
 Valkey addon 的 `check-role.sh`（roleProbe）在 secondary 分支末尾用 `( ... ) >>"${ROLE_MAINTENANCE_LOG_FILE}" 2>&1 &` fork 出 subshell 跑 cascade + stall self-heal。意图是"不阻塞 probe 主路径"。
