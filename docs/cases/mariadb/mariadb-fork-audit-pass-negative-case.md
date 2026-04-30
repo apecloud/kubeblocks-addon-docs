@@ -72,12 +72,30 @@ review mariadb addon 含 fork pattern 的 PR 时，按以下顺序：
 2. 对每条新增 fork，attribute (频率, reaper)：
    - **频率**：是 entrypoint 一次 vs 周期性触发？
    - **reaper**：fork 出去的子进程最终被 reparent 给哪个 PID 1？是 init reaper（tini / dumb-init / pause）还是业务进程？
-3. 落 [audit checklist 2x2 表](../../addon-probe-script-fork-and-zombie-guide.md#audit-checklistfork-频率-pid-1-reaper-行为) 哪一格：
-   - 任何 reaper 行 → ✅
-   - 低频 + non-reaper → ⚠️ acceptable，但本案例附录加 1 行（更新 4 处 fork pattern 表）
-   - 高频 + non-reaper → ❌ block，要求改 sync 或换 reaper 容器
+3. 落 [4D audit checklist](../../addon-probe-script-fork-and-zombie-guide.md#audit-checklist4dexecution-context--fork-source--frequency--reaper) 哪一格（注意 W 维度先确认）：
+   - W = container main / kubelet probe → **out of scope**（4 处已知 fork 都在这）
+   - W = kbagent-scheduled + 任何 reaper → ✅
+   - W = kbagent-scheduled + low + non-reaper → ⚠️ acceptable，但本案例附录加 1 行
+   - W = kbagent-scheduled + high + non-reaper → ❌ block，要求改 sync 或换 reaper 容器（参考 [`mariadb-roleprobe-timeout-kill-orphan-case.md`](mariadb-roleprobe-timeout-kill-orphan-case.md) 实测教训）
 
 ## 关联
 
 - 主文档：[`addon-probe-script-fork-and-zombie-guide.md`](../../addon-probe-script-fork-and-zombie-guide.md) — fork-from-probe zombie accumulation 通用方法论 + audit checklist 二维表
 - evidence-discipline 反例（待补，等本系列 PR 全 land 后单独 PR）：本次 audit 一开始用 "grep fork = 找 bug" 是 over-broad，正确做法是 fork × reaper 二维 attribute；这是 audit checklist 自身可能 over-fit / under-fit 的反例
+
+## Post-script (04-30): Pattern B 范围外 leak 已被实测发现
+
+**本案例 audit pass 仅对 Pattern A（显式 `&` / nohup / setsid / disown fork）成立**。04-30 task #402 zombie verification（alpha.12 idle cluster, 3 replicas, 2h sample）实测发现：pod-2 kbagent 容器有 1 个 grep zombie（PPid=1=kbagent），机制是 [`addon-probe-script-fork-and-zombie-guide.md`](../../addon-probe-script-fork-and-zombie-guide.md) 主文档新增的 **Pattern B — 隐式 timeout-kill orphan**：
+
+- `replication-roleprobe.sh:96-99` secondary 路径 4 个 `printf | grep -q` pipeline
+- `roleProbe.timeoutSeconds=1` 偶发被 SHOW SLAVE STATUS >1s 越界
+- kbagent SIGKILL 脚本主进程，pipeline 中 grep 子进程被 reparent 到 kbagent (PID 1)
+- kbagent Go binary 不 reap → zombie
+
+leak rate ~0.04%（2400 probes / 2h, 1 zombie），跟 Pattern A 量级（valkey check-role.sh 5-14/min）差几个数量级，但**机制同源**。
+
+详情见 [`mariadb-roleprobe-timeout-kill-orphan-case.md`](mariadb-roleprobe-timeout-kill-orphan-case.md)（同目录）。
+
+**audit framework 修正**：本案例标题"audit pass"现在限定为 Pattern A scope。任何后续给 mariadb addon 加 probe / lifecycle 脚本，**必须同时跑 Pattern A 显式 fork audit + Pattern B timeout-kill orphan audit**。Pattern B audit 步骤见主文档 Pattern B 章节。
+
+这次 finding 也是 **audit framework 自身可能 under-fit 的实证补充**——只查显式 keyword fork pattern 无法发现 timeout-kill 隐式 orphan，需要另一个 audit 维度（probe timeoutSeconds × 脚本 pipeline 数 × 远端调用方差）。
