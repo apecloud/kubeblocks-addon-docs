@@ -1,5 +1,11 @@
 # Oracle 12c post-switchover probe cascade kill：DBCA 杀容器 + 慢控制面 flap readiness
 
+> **Audience**: addon dev / test
+> **Status**: stable
+> **Applies to**: Oracle 12c addon on KubeBlocks（方法论可复用，参见 [`addon-probe-timeout-and-soft-failure-guide.md`](../../addon-probe-timeout-and-soft-failure-guide.md)）
+> **Applies to KB version**: 验证于 KB 1.0.3-beta.5（reconfigure_deep Run 1 / Run 2 / Run 3，2026-04-29 ~ 2026-04-30）
+> **Affected by version skew**: probe 调度方式语义稳定（kbagent timeoutSeconds SIGKILL vs kubelet livenessProbe SIGTERM grace period）跨 KB 版本一致；初始 delay / period 字段位置可能随 ComponentDefinition schema 演进调整，遇到时按 [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](../../addon-chart-vs-kb-schema-skew-diagnosis-guide.md) 流程对位
+
 属 [`addon-probe-timeout-and-soft-failure-guide.md`](../../addon-probe-timeout-and-soft-failure-guide.md) 工程现场补充。
 
 ## 现场

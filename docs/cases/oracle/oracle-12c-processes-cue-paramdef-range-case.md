@@ -1,5 +1,11 @@
 # Oracle 12c `processes` cue paramdef 范围太宽松：reconfigure_deep T22d 卡死 25min+
 
+> **Audience**: addon dev
+> **Status**: stable
+> **Applies to**: Oracle 12c addon on KubeBlocks（方法论可复用，参见 [`addon-paramdef-cue-range-validation-guide.md`](../../addon-paramdef-cue-range-validation-guide.md)）
+> **Applies to KB version**: 验证于 KB 1.0.3-beta.5（reconfigure_deep Run 2，2026-04-30，Cluster `ora-rcd-53242`）
+> **Affected by version skew**: paramdef cue API 在 KB main 重构（ParamConfigRenderer 拆进 ParametersDefinition、reconfigure 路由到 ComponentParameter，预计随 KB 1.2 发布）；cue range 校验语义本身稳定，迁移时按 [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](../../addon-chart-vs-kb-schema-skew-diagnosis-guide.md) 流程
+
 属 [`addon-paramdef-cue-range-validation-guide.md`](../../addon-paramdef-cue-range-validation-guide.md) 工程现场补充。
 
 ## 现场
