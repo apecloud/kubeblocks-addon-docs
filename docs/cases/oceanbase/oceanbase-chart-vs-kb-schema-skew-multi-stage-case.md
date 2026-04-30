@@ -129,6 +129,8 @@ $ git show -s --format="%ci %s" 72b30cd
 
 ## Step 4（反向 PR 进主 framework）— install-path schema validation 行为对照
 
+> **过渡段说明**：本节是 framework 主文档 Step 4 的 empirical anchor。一旦 [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](../../addon-chart-vs-kb-schema-skew-diagnosis-guide.md) Step 4 反向 PR 落地 + [`addon-helm-vs-kb-controller-install-path-divergence-guide.md`](../../addon-helm-vs-kb-controller-install-path-divergence-guide.md) hub 立项后，本节可裁剪为指向那两份文档的 back-link，避免与主文档/hub 重复。
+
 OceanBase case 在跑 framework 时暴露了**主文档原 Step 1-3 没覆盖的一根轴**：
 
 > KB addon-controller install 路径**宽松剥离未声明字段**；helm v4 install 走 typed patch CRD 校验，**严格拒绝**。同一份 chart 走两条路径行为不同，看到"controller 装成功"不等于"helm 装也会成功"，看到"helm 装失败"也不等于"chart 在 cluster 上不能跑"。
