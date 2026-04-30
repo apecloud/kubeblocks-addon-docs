@@ -46,6 +46,7 @@
 - [`docs/cases/mariadb/cm4-bounded-window-helper-semantic-bug-case.md`](cases/mariadb/cm4-bounded-window-helper-semantic-bug-case.md) — bounded primary-switch convergence helper 用 `last_elapsed`（最后一个采样的相对时间）误当 reconverged 时间，导致 watch_window=deadline 时永远 false-fail；修复加 `post_gap_reconverged_ts/elapsed` 用真实事件时间做 deadline 检查（属"测试验收 / first blocker 分层"案例）
 - [`docs/cases/mariadb/roleprobe-bash-shebang-on-busybox-kbagent-case.md`](cases/mariadb/roleprobe-bash-shebang-on-busybox-kbagent-case.md) — `replication-roleprobe.sh` 用 `#!/bin/bash` shebang，但 kbagent sidecar 镜像只有 busybox `/bin/sh`，直接 exec 触发 OCI ENOENT；alpha.10 把 shebang 改 `#!/bin/sh`（脚本 body 已 POSIX 兼容）
 - [`docs/cases/mariadb/rejoin-gate-single-shot-vs-bounded-wait-case.md`](cases/mariadb/rejoin-gate-single-shot-vs-bounded-wait-case.md) — addon bootstrap `finalize_replication_rejoin_ready_gate` 单次 snapshot slave_status 把 pod 卡在 `.replication-pending`；alpha.11 加 30s bounded retry，slave 收敛就 mark_replication_ready
+- [`docs/cases/mariadb/mariadb-fork-audit-pass-negative-case.md`](cases/mariadb/mariadb-fork-audit-pass-negative-case.md) — MariaDB addon 4 处 fork pattern audit pass 的 negative case：fork 都落在"低频 + non-reaper"格不堆积；给后续 reviewer 一份对照案例（不要见 fork 就 block，按 [`addon-probe-script-fork-and-zombie-guide.md`](addon-probe-script-fork-and-zombie-guide.md) 二维表 attribute）
 
 ### Valkey
 
