@@ -1,7 +1,7 @@
 # 案例：CM4 helper 把 "last sample 时间" 误当 "reconverged 时间"，导致两次跑都精确卡 61s/60s
 
 > **Audience**: addon dev / test 写 bounded retry helper 时；review 现有 helper 时识别"last_elapsed vs 真实事件时间戳"陷阱
-> **Status**: stable (case closed; alpha.X 修复已 land)
+> **Status**: stable (case closed; tests-only helper fix landed at `mariadb/lib/common.sh::assert_async_primary_converges_after_ops_allow_primary_switch_gap` — 无 addon 产品代码改动, 无 alpha 发版关联)
 > **Applies to**: MariaDB addon `mariadb/lib/common.sh::assert_async_primary_converges_after_ops_allow_primary_switch_gap`；机制对所有 bounded retry helper 适用
 > **Applies to KB version**: KB 1.0.x verified；helper bug 跨 KB 版本独立
 
