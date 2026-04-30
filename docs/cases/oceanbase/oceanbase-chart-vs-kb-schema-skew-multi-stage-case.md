@@ -1,7 +1,7 @@
 # OceanBase Chart × KB Schema Skew — framework 第一次落地实证
 
 > **Audience**: addon dev / test
-> **Status**: stable（决议段 pending — 等 chart-side 路径 B/E 拍板，落盘后此段补完）
+> **Status**: draft（decision section pending B/E — chart-side 路径拍板后 flip 为 stable）
 > **Applies to**: OceanBase enterprise addon（`apecloud-addons/addons/oceanbase`，Chart 1.0.2，appVersion `4.2.1-BP7-Hotfix2`，license `LicenseRef-KubeBlocks-Enterprise`）。方法论可复用，参见 [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](../../addon-chart-vs-kb-schema-skew-diagnosis-guide.md)
 > **Applies to KB version**: 验证于 KB 1.0.2（不可装）；最低可装 KB **v1.2.0-alpha.0+**（已被 stable lock 否决，见决议段）；release-1.0 分支也只满足部分字段
 > **Affected by version skew**: `cmpd.spec.configs[].reconfigure`（KB PR #10016，首次 tag v1.2.0-alpha.0）/ `cmpd.spec.roles[].isExclusive`（KB PR #10049，首次 tag v1.0.3-beta.0）/ `parametersdefinition.spec.componentDef`+`templateName`+`fileFormatConfig`（KB PR #10100，首次 tag v1.2.0-alpha.0）
