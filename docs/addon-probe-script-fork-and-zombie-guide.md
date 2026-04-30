@@ -1,6 +1,13 @@
 # Addon Probe 脚本 fork 与 zombie 进程指南
 
-本文面向 Addon 开发与测试工程师，聚焦一个会被 5290 case 测试 0 product fail 都掩盖、但放到生产长寿 pod 上几小时就把集群打挂的问题：**addon probe / lifecycle 脚本里 fork 出去的后台子进程，会在容器内以 zombie 形式累积，最终撞 pod PID 上限**。
+本文面向 Addon 开发与测试工程师，聚焦一类会被 5290 case 测试 0 product fail 都掩盖、但放到生产长寿 pod 上几小时就把集群打挂的问题：**addon probe / lifecycle 脚本里在 kbagent 容器内产生的 orphan 子进程，会以 zombie 形式累积，最终撞 pod PID 上限**。
+
+orphan 来源有两类：
+
+- **Pattern A — 显式 fork 后台进程**：脚本里写 `&` / `nohup` / `setsid -f` / `disown`，fork 完不 wait。
+- **Pattern B — 隐式 timeout-kill orphan**：脚本本身没有 `&`，但 pipeline / 命令替换里的子进程在 kbagent SIGKILL 父脚本时被 reparent 到 PID 1。
+
+两类机制和后果一致（PID 1 不 reap → zombie 累积），但 audit 路径不同。本指南先讲 Pattern A（显式 fork），再讲 Pattern B（隐式 timeout-kill orphan），最后给统一的 fix 设计原则。
 
 正文是 KubeBlocks 通用方法论，引擎相关现场放在案例附录。
 
@@ -62,38 +69,209 @@
 
 **KubeBlocks 默认拓扑**：每个 addon pod 至少有 valkey/mariadb/oracle 业务容器 + kbagent sidecar 容器。这两个容器的 PID 1 都不是 init reaper。
 
-## Audit checklist：fork 频率 × PID 1 reaper 行为
+## Audit checklist：4D（execution context × fork source × frequency × reaper）
 
-光找 `&` / nohup / setsid 这种 fork 关键字不够 —— 不是所有 fork 都会 leak。真正决定 leak 的是两个维度的 cross-product：
+光找 `&` / nohup / setsid 这种 fork 关键字不够 —— 不是所有 fork 都会 leak，且**不是只有显式 fork 会 leak**。真正决定 leak 的是四个维度的 cross-product：
 
-| | reaper PID 1（tini / dumb-init / pause / busybox init） | non-reaper PID 1（kbagent Go binary / valkey-server / mariadbd / 业务进程） |
+- **维度 W — 执行上下文（execution context）**：
+  - **kbagent-scheduled**：被 kbagent 调度且受 `timeoutSeconds` 强制 SIGKILL 中断的执行面（**Pattern B 在场域**）
+    - `roleProbe` / `availableProbe` / `customProbe`
+    - `lifecycleActions`（`memberJoin` / `memberLeave` / `switchover` / `accountProvision` / `dataDump` / `dataLoad` / `reconfigure` / `postProvision` / `preTerminate` / etc）
+    - `componentDefinition.actions.*` / `customAction`
+  - **kubelet-scheduled native probe**：`readinessProbe` / `livenessProbe` / `startupProbe` 直接由 kubelet 调度。**kubelet 走 SIGTERM + `terminationGracePeriodSeconds`，不是 kbagent 立刻 SIGKILL** → Pattern B 通道**不开**（trap 能跑，children 也有时间正常退出）。这条是 OceanBase `cat /tmp/ready` 类 readinessProbe 不踩 Pattern B 的根本原因。
+  - **container main / sidecar entry**：业务进程的 entrypoint / 启动脚本，由 kubelet 启动后**长寿运行直到容器退出**。kbagent 不管这些路径。pipeline / fork 即便很多也不踩 Pattern B（如 OceanBase `bootstrap.sh` 14 处 lifecycle pipeline、mariadb `cmpd-replication.yaml:639` mariadbd 后台启）。
+- **维度 X — fork source**：
+  - **A. 显式 fork**：脚本里直接写 `&` / nohup / setsid / disown，主动后台化
+  - **B. 隐式 timeout-kill orphan**：脚本里 pipeline / 命令替换 / subshell 子进程在 kbagent SIGKILL 父脚本时被 reparent 到 PID 1（详见下面 Pattern B 章节）
+  - **C.（未来扩展）**：lifecycle action 跨容器执行 / 其它 — 暂未观察到，预留 bucket
+- **维度 Y — fork frequency**：
+  - **low**：容器寿命内 1 次（start.sh / entrypoint exec / 一次性维护）
+  - **high**：probe / action 周期触发（每 N 秒一次）
+- **维度 Z — PID 1 reaper**：
+  - **reaper**：tini / dumb-init / pause / busybox init / 显式 reap 的业务进程
+  - **non-reaper**：Go binary 业务（kbagent / 部分 controllers）/ db 进程（valkey-server / mariadbd / observer）默认不 reap unrelated children
+
+判定规则：
+
+| context (W) | 进入 audit | 判定模式 |
 |---|---|---|
-| **低频 fork**（容器寿命内 1 次：start.sh 起 polling loop / entrypoint exec） | ✅ 安全 | ⚠️ 1 个长寿子进程，不堆积，但若该子进程 crash → zombie 1 个 |
-| **高频 fork**（probe / action 周期触发：每 N 秒一次） | ✅ 安全 | ❌ **leak**：每周期 1 zombie，~5-13h 撞 `pids.max=4096` |
+| **container main / sidecar entry** | ❌ **out of scope** | kbagent 不管控，pipeline 数无 zombie 风险 |
+| **kubelet-scheduled probe** | ❌ **out of Pattern B scope** | kubelet SIGTERM grace，trap 能跑；只看 Pattern A 显式 fork |
+| **kbagent-scheduled** | ✅ in scope | 走下表 |
 
-audit 时按这两个维度逐条 attribute 每个 fork pattern：
+`context = kbagent-scheduled` 时按 source × freq × reaper 落格：
 
-1. **找 fork**：`grep -rn '&[[:space:]]*$\|nohup\|setsid\|disown' addons/<engine>/scripts/ addons/<engine>/templates/`
-2. **对每条命中**，回答：
-   - **频率**：这个 fork 在容器寿命内执行几次？entrypoint 一次 vs probe 周期？
-   - **reaper**：这个 fork 出去的子进程最终被 reparent 给哪个 PID 1？该 PID 1 是 init reaper 还是业务进程？
-3. **判定**：
-   - "高频 + non-reaper" → **必修**（valkey check-role.sh 命中这一格）
-   - "低频 + non-reaper" → 可接受，但记录在案，**禁止后续把此 pattern 改成高频**
-   - 任何 "reaper" 行 → 安全
-4. **写到 audit 报告**：每条 fork 都列出"频率分类 + reaper 容器 + 判定"，留 paper trail。建议结构：
+| frequency × reaper | 判定 |
+|---|---|
+| 任何 + reaper | ✅ 安全 |
+| low + non-reaper | ⚠️ acceptable — flag only：1 个长寿子进程不堆积，但禁止后续升级成 high-freq |
+| **high + non-reaper（任何 source）** | ❌ **LEAK — must fix**：每周期 1 zombie，量级取决于触发概率 |
+
+source 不同但落到同一 cell 的影响相同。例：
+
+| 案例 | context | source | freq | reaper | cell | 判定 |
+|---|---|---|---|---|---|---|
+| valkey `check-role.sh:216`（旧版 `( ... ) &`） | kbagent-scheduled (roleProbe) | A | high | kbagent (Go) | (kbagent, A, high, non-reaper) | ❌ LEAK，~5-14/min，5-13h 撞 pids.max |
+| mariadb `replication-roleprobe.sh:96-99`（4 `printf \| grep -q`） | kbagent-scheduled (roleProbe) | B | high | kbagent (Go) | (kbagent, B, high, non-reaper) | ❌ LEAK，~0.04% probes，rate 低但同 cell |
+| valkey `check-role.sh check_sync_stall`（4-pipe `echo\|grep\|tr\|cut` × 2，B-final fix 内联） | kbagent-scheduled (roleProbe) | B | high | kbagent (Go) | (kbagent, B, high, non-reaper) | ❌ LEAK 候选（rate 估极低，待 follow-up patch land 后做案例附录） |
+| mariadb `galera-start.sh:89`（`( poll wsrep ) &`） | container main (mariadbd entry) | A | low (1x) | mariadbd (db) | **out of scope** | ✅ acceptable — flag only |
+| mariadb `cmpd-replication.yaml:639`（mariadbd 后台启） | container main | A | low (1x) | bash → mariadbd | **out of scope** | ✅ 安全 |
+| oceanbase `bootstrap.sh:24`（14 处 lifecycle pipeline） | container main (observer entry) | B 模式 | — | — | **out of scope** | ✅ 不进 audit |
+| oceanbase `cat /tmp/ready` readinessProbe | kubelet-scheduled native probe | — | high | observer | **out of Pattern B scope** | ✅（再者也无 fork） |
+
+> **scope 边界（重要）**：Pattern B 的 risk domain **仅限 W = kbagent-scheduled**。任何 container main / sidecar entry / kubelet-scheduled 路径**不在 audit 范围**。这是为什么：
+>
+> - mariadb `galera-start.sh` / `cmpd-replication.yaml:639` 等在 mariadbd 容器 entrypoint 路径的 fork **不触发 Pattern B**（[`mariadb-fork-audit-pass-negative-case.md`](cases/mariadb/mariadb-fork-audit-pass-negative-case.md)）
+> - OceanBase `bootstrap.sh` / `utils.sh` 14 处 lifecycle pipeline **不触发 Pattern B**（observer 容器 main process 路径，不受 kbagent timeout 管控）
+> - OceanBase `cat /tmp/ready` readinessProbe **不触发 Pattern B**（kubelet SIGTERM grace + 0 fork 候选）
+
+audit 时逐条 attribute 每个候选 fork：
+
+1. **先定 W (execution context)**：脚本是被谁触发的？
+   - `kubectl exec <pod> -c kbagent -- ls /var/lib/kbagent/scripts/`（kbagent rendered scripts；如果脚本在这里 → kbagent-scheduled）
+   - 或直接看 cmpd.yaml `lifecycleActions:` / `roleProbe:` / `componentVersion.actions.*` 的 `exec.script` 引用
+   - 容器 entrypoint 里的脚本（`spec.containers[*].command`）→ container main，**out of scope**
+   - 容器 native probe (`readinessProbe.exec.command` 等) → kubelet-scheduled，**out of Pattern B scope**
+2. **找 Pattern A**：`grep -rn '&[[:space:]]*$\|nohup\|setsid\|disown' addons/<engine>/scripts/ addons/<engine>/templates/`
+3. **找 Pattern B 风险池**：列出所有 W=kbagent-scheduled 脚本路径，对每个脚本数 pipeline (`|`) + 命令替换 (`$(...)`) + subshell；任何 `timeoutSeconds ≤ 2s` + 多 pipeline → 高风险候选
+4. **对每条命中**，attribute：
+   - **context**：W
+   - **source**：A / B / C
+   - **frequency**：low / high
+   - **reaper**：reaper / non-reaper（实测：进容器 `cat /proc/1/comm`）
+5. **判定**：按上面 cell 表
+6. **写 audit 报告**：每条都列 `script:line | context | source | freq | reaper | cell | verdict`，留 paper trail。建议结构（mariadb / valkey 案例已用此格式）：
 
    ```
-   | script:line                     | freq      | reaper container | verdict                 |
-   |---------------------------------|-----------|------------------|-------------------------|
-   | scripts/check-role.sh:216       | high      | kbagent (Go)     | LEAK — must fix         |
-   | scripts/galera-start.sh:89      | low (1x)  | mariadbd (db)    | acceptable — flag only  |
-   | templates/cmpd-semisync.yaml:280| low (1x)  | mariadbd (db)    | acceptable — flag only  |
+   | script:line                              | context (W)         | source | freq | reaper container | verdict                 |
+   |------------------------------------------|---------------------|--------|------|------------------|-------------------------|
+   | scripts/check-role.sh:216                | kbagent (roleProbe) | A      | high | kbagent (Go)     | LEAK — must fix         |
+   | scripts/replication-roleprobe.sh:96-99   | kbagent (roleProbe) | B      | high | kbagent (Go)     | LEAK — must fix         |
+   | scripts/galera-start.sh:89               | container main      | A      | low  | mariadbd (db)    | out of scope            |
+   | scripts/oceanbase-bootstrap.sh:24        | container main      | B 模式 | —    | —                | out of scope            |
+   | spec.containers[*].readinessProbe        | kubelet probe       | —      | —    | —                | out of Pattern B scope  |
    ```
 
-   只有 verdict 列出现 `LEAK` 才是必修；`acceptable — flag only` 这一行要在后续 review 里继续监控，禁止把它升级成 high-freq。
+   只有 verdict 列出现 `LEAK` 才是必修；`acceptable — flag only` 这一行要在后续 review 里继续监控，禁止把它升级成 high-freq。`out of scope` / `out of Pattern B scope` 是**主动 carve-out**，不是漏洞。
 
-### 容易混淆的细节
+## Pattern A：显式 fork 后台进程
+
+写在脚本里的 `&` / nohup / setsid / disown：
+
+```bash
+( do_maintenance ) >> /tmp/log 2>&1 &     # 显式 fork subshell
+nohup background_task &                    # nohup + &
+setsid -f long_runner                      # setsid 强制脱离会话
+```
+
+每条 probe 周期都 fork 1 次。**如果脚本运行在 non-reaper 容器（kbagent / 业务进程 PID 1）**，每个 fork 留 1 zombie，rate = cadence-1（cadence 5s → 12/min）。
+
+历史样本（valkey check-role.sh，详见后面案例附录）：实测 ~5-14/min zombie 累积速率，K8s `pids.max=4096` 5-13 小时撞顶。
+
+## Pattern B：隐式 timeout-kill orphan
+
+Pattern A 的 audit 找的是脚本里**显式**的后台 fork（`&` / nohup / setsid / disown）。但**没有 `&`、看起来纯 sync 的脚本，依然可能漏 zombie**——只要 kbagent 在脚本执行中途 SIGKILL 它。
+
+### 触发链
+
+KubeBlocks `roleProbe` / lifecycle action 都有 `timeoutSeconds`（默认 3s，可在 cmpd.yaml 收紧到 1-2s）。当 probe 实际执行超过这个值：
+
+1. kbagent 对脚本主进程 `kill(pid, SIGKILL)`。
+2. **SIGKILL 不传子进程**（Linux 内核 doc：信号传到进程组要靠 setpgid + `kill(-pgid, ...)`，单 PID `kill` 不会广播）。
+3. 脚本主进程瞬间死，它正在 fork 出来跑的 pipeline / 命令替换子进程仍在运行。
+4. 这些子进程的 parent 死了，Linux 把它们 reparent 到 PID 1（kbagent Go binary）。
+5. 它们后续退出，kbagent 不 reap，留成 zombie。
+
+最常见的子进程 fork pattern：
+
+```bash
+# 命令替换 — sh 起 subshell + pipeline，里面是 cat + grep
+result=$(cat /tmp/foo | grep PATTERN)
+
+# 直接 pipeline
+some_db_query | grep -q "Field: Value" || return 1
+
+# subshell + 命令替换
+data=$(query_remote_db)
+echo "$data" | grep -q "OK"
+```
+
+每条都会 fork 1-2 个子进程。在 sync 流程下，shell 会 wait 它们；但**只要 shell 主进程被 SIGKILL，wait 链就断了**。
+
+### 易触发的脚本特征
+
+- 远端调用（DB 查询 / HTTP / kubectl）耗时高方差，偶发超 timeout。例如 `SHOW SLAVE STATUS` 在 mariadbd busy / 网络抖动时可能 >1s。
+- timeoutSeconds 收得紧（≤2s）。
+- 脚本里 pipeline 多（每条 pipeline = 至少 2 个子进程候选 orphan）。
+- secondary / replica 路径比 primary 路径常踩，因为 secondary 路径常需要 SHOW SLAVE STATUS / replication state grep，比 primary 一行 echo 复杂得多。
+
+### 跟 Pattern A 的频率对照
+
+| 维度 | Pattern A 显式 fork | Pattern B timeout-kill orphan |
+|---|---|---|
+| 触发条件 | 每周期 1 个（脚本写 `&` 必发） | 仅当 probe 超 timeout 时（少数 probe） |
+| Leak 速率 | 高，跟 cadence 1:1（5s cadence → 12/min, 3s cadence → 20/min） | 低，跟 timeout-越界率成正比（实测 ~0.04% probes 触发，2400 probes / 2h → 1 zombie） |
+| 撞 pids.max=4096 | 5-13h | 数百小时 — 不会单独压爆，但跟 Pattern A 叠加放大 |
+| Audit 命中关键词 | `grep -E '\&[[:space:]]*$\|nohup\|setsid\|disown'` | **没有关键词** — 只能靠"timeout 紧 + pipeline 多"推断 |
+
+Pattern B 量级远低于 Pattern A，但**不等于零**。在 chaos / soak 测试或长寿生产 pod 仍可能撞。
+
+### Pattern B audit 步骤
+
+不能像 Pattern A 那样 `grep` 找 `&`。用 3 步推断：
+
+1. **看 cmpd.yaml**：找所有 `roleProbe` / `availableProbe` / 自定义 probe / lifecycle action 的 `timeoutSeconds`。任何 ≤ 2s 都进 Pattern B 风险池。
+2. **读对应脚本**：在风险池脚本里数 pipeline 数 (`|`) 和命令替换数 (`$(...)` / `` `...` ``)。同一个脚本里：
+   - 0-1 个 pipeline → 风险低
+   - 2+ pipelines → 风险高，特别是当 pipeline 涉及 db 查询/远端调用
+3. **看历史 timeout 日志**：在 kbagent 日志里 grep `timeout` / `signal` / `killed` 关键词；在 KB controller 日志里 grep `roleProbe.*code=-1`。如果有 N 次 timeout，估算每次留 0-2 个 orphan，对照实际 zombie 数。
+
+### Pattern B 实测示例（最小命令）
+
+在已运行 N 小时的 cluster 上：
+
+```bash
+# 1) 列出所有 zombie 的 comm + ppid
+kubectl exec <pod> -c kbagent -- sh -c '
+  for pid in $(ls /proc | grep -E "^[0-9]+$"); do
+    [ -r /proc/$pid/stat ] || continue
+    state=$(awk "{print \$3}" /proc/$pid/stat 2>/dev/null)
+    if [ "$state" = "Z" ]; then
+      ppid=$(awk "{print \$4}" /proc/$pid/stat 2>/dev/null)
+      comm=$(cat /proc/$pid/comm 2>/dev/null)
+      echo "Z pid=$pid ppid=$ppid comm=$comm"
+    fi
+  done
+'
+```
+
+判定：
+- `comm=grep` / `comm=cat` / `comm=awk` / `comm=sed` / `comm=printf` 这些纯 text 工具 + `ppid=1`（PID 1 是 kbagent）→ Pattern B 高度命中
+- `comm=<脚本名>` / `comm=<probe 函数名>` → Pattern A 命中（脚本主进程 fork 出 subshell 跑后台逻辑）
+- 其它 → 看具体 cmdline 再判定
+
+### Pattern B 的 fix 路径
+
+1. **放宽 timeoutSeconds**（最便宜）：把 1s → 2-3s，留余量给 pipeline 收尾。**仅当 timeout 不在 critical path 时**安全（cadence 3s + timeout 2s 仍合理；cadence 3s + timeout 3s 就把 pacing 排空了不推荐）。
+2. **远端调用 timeout 内置**：把脚本里的远端查询用 `timeout 1` 包，确保任何子进程 ≤ 1s 退出，比 kbagent SIGKILL 早一步 self-clean。
+3. **简化 pipeline**：先把数据放进 shell 变量，再用 `case` / 内建字符串测试代替 `grep`。例如：
+
+   ```bash
+   # ❌ pipeline + grep（每行 2 个子进程候选 orphan）
+   echo "$slave_status" | grep -q "Slave_IO_Running: Yes" || return 1
+
+   # ✅ shell 内建（0 子进程）
+   case "$slave_status" in
+     *"Slave_IO_Running: Yes"*) ;;
+     *) return 1 ;;
+   esac
+   ```
+
+4. **trap SIGTERM/EXIT 主动 kill 进程组**：脚本开头 `trap 'kill -- -$$ 2>/dev/null' EXIT`，配合 `set -m` 让脚本在自己进程组里。脚本被 SIGKILL 时无法执行 trap，但 SIGTERM 会触发，覆盖一部分场景；kbagent 默认走 SIGKILL 时此招无效，仅作辅助。
+
+实践推荐：1 + 3 一起做。1 给一手余量、3 把 fork 数压到 0。
+
+## 容易混淆的细节
 
 - **kbagent 镜像默认没装 `ps`**：用 `/proc/*/stat` 的 state 字段（`Z` = zombie）替代。
 - **同一句 `&` 在不同容器里行为不同**：valkey 把 fork 写在 kbagent 跑的 probe 脚本里 → reaper 是 kbagent → leak；mariadb 把 fork 写在 mariadbd 容器的 entrypoint → reaper 是 mariadbd → 单次 fork 不堆积。**不要按"脚本里有 `&` 就一概 block"**，而要按 cross-product 决断。
