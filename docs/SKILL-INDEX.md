@@ -90,6 +90,8 @@
 - [`docs/addon-k3d-host-precheck-guide.md`](addon-k3d-host-precheck-guide.md) — 跑 smoke / chaos 之前先跑 host-level k3d precheck（API 可达性 + 延迟 + 集群 CPU/MEM 水位 + stuck 检测）。配套工具 `kubeblocks-tests/scripts/k3d-precheck.sh`（zsh，三档输出：表格 / JSON / quiet exit）；含 3 个 tooling 通用坑（k3d kubeconfig 0.0.0.0 / k3d v5 label 变更 `k3d.cluster` / macOS bash 3.2 限制）+ runner 集成 pre-hook + 三台测试机（Machine A/B/C）跨主机 ops profile baseline
 - [`docs/addon-probe-timeout-and-soft-failure-guide.md`](addon-probe-timeout-and-soft-failure-guide.md) — addon CmpD 内部 livenessProbe / readinessProbe 脚本的"信道层错 vs 产品层错"分层：客户端 rc!=0 一律 transient → exit 0；只有客户端成功返回 + 输出确认 bad state 才 exit 1；合法慢窗口用 pgrep 守门；含 7 条硬规则 + 反模式表 + 自检清单
 - [`docs/addon-paramdef-cue-range-validation-guide.md`](addon-paramdef-cue-range-validation-guide.md) — ParametersDefinition cue/tpl 数值参数范围必须用 practical_min/max（实测能启动），不是 doc_hard_min/max（理论可设）；schema 是 reconfigure 流程的守门；含 7 条硬规则 + 反模式表 + 自检清单 + boundary-1 验证流程
+- [`docs/addon-test-runner-cadence-discipline-guide.md`](addon-test-runner-cadence-discipline-guide.md) — 长时 test runner 运行期间，cadence 是操作者（而非 runner）的义务：5min 默认是硬约束；沉默 > 间隔 = 状态未知；no-progress ping 有效；cadence 触发器必须与 runner 进程解耦；含 7 条硬规则 + 反模式表 + 自检清单 + Run 5 反面 / Run 6 正面双案例
+- [`docs/addon-test-dg-helper-completeness-guide.md`](addon-test-dg-helper-completeness-guide.md) — 多步骤异步操作的 test helper 必须使用 multi-gate：单一状态字符串是 fakeable 的，必须补充 unfakeable observable invariant（成员计数 / 角色标签 / 指标阈值）；gate 串行 AND 不能短路 OR；fix 需 dry-run（无 false-negative）+ fresh install（真正 blocks race window）双验证；含 7 条硬规则 + 反模式表 + 自检清单 + Oracle DG Bug #26 案例
 
 ## 案例材料
 
