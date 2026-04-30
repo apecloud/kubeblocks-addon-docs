@@ -1,5 +1,10 @@
 # MariaDB async primary election 对齐 syncer/control-plane 案例材料
 
+> **Audience**: addon dev / TL 在评估 async primary election 是否需要 control-plane 单点收口时
+> **Status**: stable (case closed; #13 主线收敛到 syncer/control-plane)
+> **Applies to**: MariaDB addon async primary 选主问题线；通用 control-plane 收口设计经验回主题文档 [`addon-control-plane-election-guide.md`](../../addon-control-plane-election-guide.md)
+> **Applies to KB version**: KB 1.0.x verified；control-plane election 设计原则跨 KB 版本独立
+
 本文是 MariaDB 案例材料，不是通用开发方法论文档。
 
 它记录 MariaDB async 当前 primary 选主问题为什么不能继续停留在 `bootstrap + roleProbe + watcher` 的拆分实现上，以及 `#13` 主线为什么要收敛到 `syncer/control-plane`。

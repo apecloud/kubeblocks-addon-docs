@@ -1,5 +1,10 @@
 # MariaDB CM1 dynamic reload 证据摘要
 
+> **Audience**: 复盘 CM1 dynamic reload case 的工程师；后续 reviewer 需稳定证据入口时
+> **Status**: stable (evidence frozen)
+> **Applies to**: MariaDB addon CM1 case 的 evidence 摘要；上层 case 详见 [`cm1-dynamic-reload-case.md`](../cm1-dynamic-reload-case.md)
+> **Applies to KB version**: KB 1.0.x verified（与 parent case 一致）
+
 这份摘要把 `CM1 / dynamic reload` 已闭环案例里最关键的证据固定到 skills 仓库路径，避免后续跨人复盘时只依赖 `/tmp` 下的临时文件。
 
 ## 对应原始材料

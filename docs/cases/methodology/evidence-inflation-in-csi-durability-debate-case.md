@@ -1,5 +1,10 @@
 # 案例：MariaDB #396 CSI durability 讨论中的 3 次 evidence inflation 与 3 次撤回
 
+> **Audience**: addon dev / TL 撞到自己 / 协作者 evidence inflation 时；写 RCA / review-summary / 给决策者 DM 时做自检
+> **Status**: stable (case closed; 3 次 inflation 都被协作者 challenge 后撤回)
+> **Applies to**: 任何工程现场（不绑定单一引擎）；该案例本身发生在 MariaDB #396 调查，但反模式机制（motivated narrative inflation / N=1→average / indirect→systemic）跨引擎跨场景适用
+> **Applies to KB version**: any（evidence discipline 是方法论层，跟 KB 版本无关）
+
 属于：[`addon-evidence-discipline-guide.md`](../../addon-evidence-discipline-guide.md) 方法论案例。
 
 ## 背景

@@ -1,5 +1,10 @@
 # MariaDB CM1 dynamic reload 已闭环案例
 
+> **Audience**: addon dev / test 在 MariaDB reconfigure 或 `ParametersDefinition` / `reloadAction` 设计场景
+> **Status**: stable (case closed)
+> **Applies to**: MariaDB addon — `reloadAction` 落 live `ParametersDefinition` 路径；通用 reconfigure 经验回主题文档 [`addon-reconfigure-guide.md`](../../addon-reconfigure-guide.md)
+> **Applies to KB version**: KB 1.0.x verified（ParametersDefinition schema 跨 1.0 / 1.1 稳定；KB main reconfigure API 重构见 [`addon-reconfigure-guide.md`](../../addon-reconfigure-guide.md)）
+
 本文是 MariaDB 案例材料，不是通用 reconfigure 方法论文档。
 
 它记录一个已经闭环的最小案例：`CM1 / dynamic reload`。目标不是复述整条项目历史，而是给 Addon 开发者留下一个可复用的“症状 -> 根因 -> 修复点 -> 最小验证口径”样板。通用 reconfigure 经验应继续沉淀在 [`docs/addon-reconfigure-guide.md`](../../addon-reconfigure-guide.md)。

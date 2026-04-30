@@ -1,5 +1,10 @@
 # 案例：roleProbe 脚本 `#!/bin/bash` shebang 在仅有 busybox sh 的 kbagent 容器里直接 exec 失败
 
+> **Audience**: addon dev 写 probe / lifecycle 脚本 shebang 选型时；script-vs-image-shell 兼容性 audit 时
+> **Status**: stable (alpha.10 修复已 land：shebang `#!/bin/bash` → `#!/bin/sh`，脚本 body 已 POSIX 兼容)
+> **Applies to**: MariaDB addon `addons/mariadb/scripts/replication-roleprobe.sh` + `galera-roleprobe.sh`；kbagent sidecar 镜像约定（busybox /bin/sh, 无 bash）跨引擎一致
+> **Applies to KB version**: KB 1.0.x verified；kbagent 镜像内 shell 约定跨 KB 版本独立
+
 属于：[`addon-bounded-eventual-convergence-guide.md`](../../addon-bounded-eventual-convergence-guide.md) 案例（脚本调用面，非状态判定面，但同属"环境前提与脚本契约不匹配"）。
 
 ## 背景
