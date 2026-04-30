@@ -62,6 +62,33 @@
 
 **KubeBlocks 默认拓扑**：每个 addon pod 至少有 valkey/mariadb/oracle 业务容器 + kbagent sidecar 容器。这两个容器的 PID 1 都不是 init reaper。
 
+## Audit checklist：fork 频率 × PID 1 reaper 行为
+
+光找 `&` / nohup / setsid 这种 fork 关键字不够 —— 不是所有 fork 都会 leak。真正决定 leak 的是两个维度的 cross-product：
+
+| | reaper PID 1（tini / dumb-init / pause / busybox init） | non-reaper PID 1（kbagent Go binary / valkey-server / mariadbd / 业务进程） |
+|---|---|---|
+| **低频 fork**（容器寿命内 1 次：start.sh 起 polling loop / entrypoint exec） | ✅ 安全 | ⚠️ 1 个长寿子进程，不堆积，但若该子进程 crash → zombie 1 个 |
+| **高频 fork**（probe / action 周期触发：每 N 秒一次） | ✅ 安全 | ❌ **leak**：每周期 1 zombie，~5-13h 撞 `pids.max=4096` |
+
+audit 时按这两个维度逐条 attribute 每个 fork pattern：
+
+1. **找 fork**：`grep -rn '&[[:space:]]*$\|nohup\|setsid\|disown' addons/<engine>/scripts/ addons/<engine>/templates/`
+2. **对每条命中**，回答：
+   - **频率**：这个 fork 在容器寿命内执行几次？entrypoint 一次 vs probe 周期？
+   - **reaper**：这个 fork 出去的子进程最终被 reparent 给哪个 PID 1？该 PID 1 是 init reaper 还是业务进程？
+3. **判定**：
+   - "高频 + non-reaper" → **必修**（valkey check-role.sh 命中这一格）
+   - "低频 + non-reaper" → 可接受，但记录在案，**禁止后续把此 pattern 改成高频**
+   - 任何 "reaper" 行 → 安全
+4. **写到 audit 报告**：每条 fork 都列出"频率分类 + reaper 容器 + 判定"，留 paper trail。
+
+### 容易混淆的细节
+
+- **kbagent 镜像默认没装 `ps`**：用 `/proc/*/stat` 的 state 字段（`Z` = zombie）替代。
+- **同一句 `&` 在不同容器里行为不同**：valkey 把 fork 写在 kbagent 跑的 probe 脚本里 → reaper 是 kbagent → leak；mariadb 把 fork 写在 mariadbd 容器的 entrypoint → reaper 是 mariadbd → 单次 fork 不堆积。**不要按"脚本里有 `&` 就一概 block"**，而要按 cross-product 决断。
+- **看 cmpd.yaml `exec.container` 字段不够**：实测 kbagent 即便配了 `container: valkey`，仍可能在自己容器里跑这条脚本（kbagent 通过 HTTP probe API 调度，不是 nsenter）。**audit 时务必去 `kubectl exec -c kbagent ... -- ls /proc/*/comm` 实测，不要只读 yaml**。
+
 ## 为什么 probe 脚本最容易踩
 
 probe 脚本在哪个容器里跑、PID 1 是谁，决定 zombie 的归属：
