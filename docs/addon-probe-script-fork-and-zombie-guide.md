@@ -81,13 +81,52 @@ audit 时按这两个维度逐条 attribute 每个 fork pattern：
    - "高频 + non-reaper" → **必修**（valkey check-role.sh 命中这一格）
    - "低频 + non-reaper" → 可接受，但记录在案，**禁止后续把此 pattern 改成高频**
    - 任何 "reaper" 行 → 安全
-4. **写到 audit 报告**：每条 fork 都列出"频率分类 + reaper 容器 + 判定"，留 paper trail。
+4. **写到 audit 报告**：每条 fork 都列出"频率分类 + reaper 容器 + 判定"，留 paper trail。建议结构：
+
+   ```
+   | script:line                     | freq      | reaper container | verdict                 |
+   |---------------------------------|-----------|------------------|-------------------------|
+   | scripts/check-role.sh:216       | high      | kbagent (Go)     | LEAK — must fix         |
+   | scripts/galera-start.sh:89      | low (1x)  | mariadbd (db)    | acceptable — flag only  |
+   | templates/cmpd-semisync.yaml:280| low (1x)  | mariadbd (db)    | acceptable — flag only  |
+   ```
+
+   只有 verdict 列出现 `LEAK` 才是必修；`acceptable — flag only` 这一行要在后续 review 里继续监控，禁止把它升级成 high-freq。
 
 ### 容易混淆的细节
 
 - **kbagent 镜像默认没装 `ps`**：用 `/proc/*/stat` 的 state 字段（`Z` = zombie）替代。
 - **同一句 `&` 在不同容器里行为不同**：valkey 把 fork 写在 kbagent 跑的 probe 脚本里 → reaper 是 kbagent → leak；mariadb 把 fork 写在 mariadbd 容器的 entrypoint → reaper 是 mariadbd → 单次 fork 不堆积。**不要按"脚本里有 `&` 就一概 block"**，而要按 cross-product 决断。
-- **看 cmpd.yaml `exec.container` 字段不够**：实测 kbagent 即便配了 `container: valkey`，仍可能在自己容器里跑这条脚本（kbagent 通过 HTTP probe API 调度，不是 nsenter）。**audit 时务必去 `kubectl exec -c kbagent ... -- ls /proc/*/comm` 实测，不要只读 yaml**。
+- **看 cmpd.yaml `exec.container` 字段不够**：实测 kbagent 即便配了 `container: valkey`，仍可能在自己容器里跑这条脚本（kbagent 通过 HTTP probe API 调度，不是 nsenter）。**audit 时务必实测**，不要只读 yaml。最小验证命令：
+
+  ```bash
+  # 1) 找你想 audit 的 probe / action（这里以 roleProbe 为例）触发的脚本输出文件路径
+  PROBE_TMP_FILE=/tmp/<engine>_role_maintenance.log    # 替换为你的 addon 实际写出文件
+
+  # 2) 在 db 容器查这个文件是否存在（如果脚本真在 db 容器跑会有这个文件）
+  kubectl exec <pod> -c <db_container_name> -- ls -la "${PROBE_TMP_FILE}" 2>&1
+
+  # 3) 同时在 kbagent 容器查（如果脚本真在 kbagent 容器跑会有这个文件）
+  kubectl exec <pod> -c kbagent -- ls -la "${PROBE_TMP_FILE}" 2>&1
+
+  # 4) 哪个容器的 ls 找到了文件，脚本就在哪个容器跑。reaper PID 1 = 那个容器的 PID 1。
+  kubectl exec <pod> -c <winning_container> -- cat /proc/1/comm
+  ```
+
+  也可以反向用"哪个容器有 zombie"做实测：
+  ```bash
+  for c in $(kubectl get pod <pod> -o jsonpath='{range .spec.containers[*]}{.name}{" "}{end}'); do
+    echo "=== ${c} ==="
+    kubectl exec <pod> -c "${c}" -- sh -c '
+      for pid in $(ls /proc | grep -E "^[0-9]+$"); do
+        [ -r /proc/$pid/stat ] || continue
+        state=$(awk "{print \$3}" /proc/$pid/stat 2>/dev/null)
+        [ "$state" = "Z" ] && echo "Z: $(cat /proc/$pid/comm 2>/dev/null)"
+      done
+    ' 2>/dev/null
+  done
+  ```
+  哪个容器列出 zombie，fork 就在那个容器跑。
 
 ## 为什么 probe 脚本最容易踩
 
