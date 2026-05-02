@@ -1,5 +1,10 @@
 # 案例：addon `finalize_replication_rejoin_ready_gate` 单次 snapshot 把 .replication-pending 永久卡死
 
+> **Audience**: addon dev 写 bootstrap / rejoin / probe 业务代码时；判 "single snapshot vs bounded retry" 时
+> **Status**: stable (alpha.11 修复已 land：30s bounded retry, slave 收敛即 mark_replication_ready)
+> **Applies to**: MariaDB addon `templates/cmpd-replication.yaml::finalize_replication_rejoin_ready_gate`；addon 业务代码侧 single-snapshot 反模式 generic
+> **Applies to KB version**: KB 1.0.x verified；roleProbe / readyWithRole gate 行为跨 KB 1.0 / 1.1 稳定
+
 属于：[`addon-bounded-eventual-convergence-guide.md`](../../addon-bounded-eventual-convergence-guide.md) 引擎案例（addon 内业务代码侧的同一类反模式）。
 
 ## 背景

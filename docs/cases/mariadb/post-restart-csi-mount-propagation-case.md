@@ -1,5 +1,10 @@
 # 案例：post-restart 后 csi-hostpath mount propagation 失效，MariaDB T1 timeout
 
+> **Audience**: addon test / 本机 k3d 运维 / 在 post-restart 后跑 smoke 时撞 T1 timeout 的工程师
+> **Status**: stable (case closed)
+> **Applies to**: MariaDB addon (sample `mdb-vc376a1-221520`)；mount propagation 机制是 k3d / Docker / kubelet 层，跨引擎适用
+> **Applies to KB version**: KB 1.0.x verified；csi-hostpath / kubelet 行为跨 KB 版本独立（环境层问题）
+
 属于：[`addon-test-environment-gate-hygiene-guide.md`](../../addon-test-environment-gate-hygiene-guide.md) 的引擎案例。
 
 ## 背景
