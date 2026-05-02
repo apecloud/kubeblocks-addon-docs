@@ -7,6 +7,43 @@
 
 本文面向 Addon 开发者、测试工程师和技术负责人，重点总结如何定义测试成功语义、如何收 first blocker，以及如何避免把环境、测试口径和产品缺陷混写。
 
+## 先用白话理解这篇文档
+
+### 这篇文档解决什么问题
+
+测试报失败之后争论最大的不是"修不修"，而是"到底是哪一层错了"。
+
+**新读者常踩的两种相反陷阱**：
+
+- 看到 runner 报 FAIL 立刻当成产品 fail —— 实际上 first blocker 经常落在**比产品更早的层**：环境就绪、镜像分发、CSI plugin 状态、runner harness、测试口径、控制面 contract 都可能先错
+- 看到任何 FAIL 都先怀疑是测试本身的问题 —— 这把真实产品 bug 当噪音吞掉，留给客户撞
+
+→ 真正的方法论是**先把"哪一层算成功"分清**，再按 first blocker 分层归因，**不要在没有分层的状态下争论**。
+
+### 何时本文方法论 apply
+
+| 场景 | 关键决策 |
+|---|---|
+| 跑 smoke / chaos / regression 拿到第一个 FAIL | 先按 first blocker 分层（环境 / runner / 口径 / 控制面 / 产品），不要立刻写 product fail |
+| OpsRequest 报 `Succeed` 但下一步 case 报 FAIL | 区分动作层 vs 拓扑层 vs 数据层 vs route 层成功 |
+| 单 case 定向复验 | 先校验验证入口坐标 / 样本绑定基线 / runner 重打包后是否还指向同一样本 |
+| post-restart 后跑测试 | 默认怀疑 setup blocker 在环境层先失效（详见 `addon-test-environment-gate-hygiene-guide.md`）|
+| 写 RCA / final review-summary | 标 first blocker 时必须打层级 tag，不只写"FAIL 数" |
+| 看 runner exit 1 但 post-run 残留 0 | 检查是不是 observation-class fail（不写产品 fail）|
+
+### 读完你能做什么决策
+
+- **拿到 N 个 FAIL 时**：能在 5 分钟内按层级分类，知道哪些是 setup blocker / runner harness / observation gap / 真产品 fail
+- **判产品 fail 时**：知道这条结论需要先排除哪 4 层 noise 才能下
+- **写 review-summary 时**：能给每条 fail 标 layer tag（不只 PASS/FAIL/SKIP 计数）
+- **判 OpsRequest Succeed 是否真成功**：知道"controller phase Succeed"和"runtime / route / 数据层 ok"是不同 contract
+
+### 为什么独立成篇
+
+跟 `addon-test-environment-gate-hygiene-guide.md`（开跑前不踩雷）+ `addon-test-probe-classification-guide.md`（跑中失败不误归到 DB）一起构成完整的"环境 → 探针 → 验收"三阶段方法论。本文聚焦**验收 / first blocker 分层**这一阶段：测试结果出来后如何不混层归因。
+
+---
+
 ## 适用场景
 
 当你在推进以下工作时，这份文档适用：
