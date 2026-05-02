@@ -98,7 +98,7 @@ cluster phase remains Running
 
 ## Bug #17 候选（advisory，不阻塞）
 
-KB OpsRequest 当前**无 reconfigure 后 DB 起不来 → OpsRequest 自动 Failed** 机制。Bug #16 fix 后这个 path 不再触发（cue 在 ValidatePhase 拒掉）。但 KB 应该有"DB pod NotReady 持续 N 分钟 → OpsRequest Failed"兜底逻辑——smoke 全绿后单独 brief @westonnnn 决定是否给 KB team 提。
+KB OpsRequest 当前**无 reconfigure 后 DB 起不来 → OpsRequest 自动 Failed** 机制。Bug #16 fix 后这个 path 不再触发（cue 在 ValidatePhase 拒掉）。但 KB 应该有"DB pod NotReady 持续 N 分钟 → OpsRequest Failed"兜底逻辑；smoke 全绿后可以单独 brief 项目 owner 决定是否给 KB team 提。
 
 ## 教训
 

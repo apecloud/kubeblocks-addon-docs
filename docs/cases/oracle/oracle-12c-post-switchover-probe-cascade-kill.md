@@ -55,7 +55,7 @@ Oracle 在 switchover、RMAN active duplicate、DG broker reconfigure 期间，`
 
 ## 5 件 Evidence Dig（撤销错误假设）
 
-我（James）第一次读代码后假设根因是「broker self-check 循环依赖」，基于纯代码推理。@John 5 件 evidence dig 推翻这个假设：
+Oracle TL 第一次读代码后假设根因是「broker self-check 循环依赖」，基于纯代码推理。测试 owner 的 5 件 evidence dig 推翻这个假设：
 
 1. **CmpD memberJoin lifecycleAction 定义** — `preCondition: RuntimeReady` 要求所有 replica 的 runtime ready
 2. **Component.Status 没有 `membersStatus` 字段** — 说明 KB 还没进入 memberJoin 流程
