@@ -87,6 +87,7 @@
 - [`docs/addon-k3d-backup-restore-prereqs-guide.md`](addon-k3d-backup-restore-prereqs-guide.md) — k3d 上跑 KB Backup/Restore 的两层环境前置：装 VolumeSnapshot CRD（让 dataprotection controller 起来）+ 建默认 BackupRepo（让 Backup CR 不再 NoDefaultBackupRepo），引擎无关
 - [`docs/addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md) — macOS bash 3.2 + `set -euo pipefail` 下 runner 的 7 个常见兼容坑（空数组、env-default 时机、单条 local 内互引用、`v\$parameter`、`local x=$(cmd)` 等）+ 自检清单
 - [`docs/addon-probe-script-fork-and-zombie-guide.md`](addon-probe-script-fork-and-zombie-guide.md) — addon probe / lifecycle 脚本里 fork 后台子进程在 kbagent / business 容器内累积 zombie 的两类机制：**Pattern A（显式 fork：`&` / nohup / setsid）** ~5-14/min 撞 pids.max；**Pattern B（隐式 timeout-kill orphan：pipeline / `$(...)` 子进程在 kbagent SIGKILL 父脚本时 orphan）**~0.04% probes 低速率但同 cell。统一 4D audit checklist（execution context × fork source × frequency × reaper）；valkey check-role.sh fix 验证（前 14/min → 后 0/min）+ mariadb #402 Pattern B 实证 + OceanBase audit pass scope carve-out
+- [`docs/addon-k3d-host-precheck-guide.md`](addon-k3d-host-precheck-guide.md) — 跑 smoke / chaos 之前先跑 host-level k3d precheck（API 可达性 + 延迟 + 集群 CPU/MEM 水位 + stuck 检测）。配套工具 `kubeblocks-tests/scripts/k3d-precheck.sh`（zsh，三档输出：表格 / JSON / quiet exit）；含 3 个 tooling 通用坑（k3d kubeconfig 0.0.0.0 / k3d v5 label 变更 `k3d.cluster` / macOS bash 3.2 限制）+ runner 集成 pre-hook + 三台测试机（Machine A/B/C）跨主机 ops profile baseline
 
 ## 案例材料
 
