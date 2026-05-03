@@ -230,9 +230,84 @@ R07（scale-in 时 master kill 与 hot backup 重叠的窄时间窗）在 Phase 
 - Phase 3 final root：`/Users/wei/.slock/agents/.../valkey-phase3-regression-x10-091219/final/review-summary.md`
 - 验证环境：k3d `kb-local`，KubeBlocks 1.2，Valkey addon rev 57
 
+## 案例附录：Valkey RebuildInstance race fix — 五层验证矩阵 (PR #10191)
+
+apecloud/kubeblocks PR #10191 的 e2e 验证用了一个比"baseline / chaos / regression"三段更细的五层矩阵。这个矩阵的 specific 价值是它在 Phase 6 acceptance 之外又加了两层"扩展强度"专门用来逼出 contract 层的并发缺口；最终在四个 follow-up commit 里关闭了 4 类没在 baseline N=10 里浮出来的 race。本附录给具体数和命令。
+
+### 五层结构和数
+
+| 层 | 内容 | 样本数 | product fail |
+|---|---|---|---|
+| 独立 acceptance | 全新 cluster + 30 baseline keys + slave disruption + RebuildInstance + data verify + topology verify | 10/10 PASS | 0 |
+| 独立扩展 | 同形 acceptance 再 4 trial 拉宽 flake-detection 样本 | 4/4 PASS | 0 |
+| 同 cluster 密集（initial） | 5 + 10 + 20 三组 rotating-slave RebuildInstance ops，no recreate between ops | 35/35 PASS | 0 |
+| controller-restart chaos gate | 在 intent annotation `present → absent` AND pod `Ready=False` 同时成立时刻 `kubectl rollout restart` kb-controller | 1/1 PASS | 0 |
+| 同 cluster 密集（follow-up after 4 fixes） | 三组 rotating-slave RebuildInstance ops 重跑 + 并发 OpsRequest O02 端到端 | 35/35 PASS（最终 N=20 final tally `PASS 240 / FAIL 0 / SKIP 0`） | 0 |
+
+**五层累计 84+ valid sample，全程 0 个 `PersistentVolume "" not found`、0 个 source PVC 最终绑到非 helper PV、0 个 cleanup conflict、0 个 stale intent residue。**
+
+### 扩展强度兑现的 4 个 contract gap
+
+baseline 49-sample（前三层）clean。但加了第四层 chaos gate 和第五层 dense follow-up 之后，逼出 4 类原本看不见的 contract 缺陷，每一个都直接 land 一个 fix commit：
+
+1. 同 instance/claim 并发 RebuildInstance 不 terminal — fix `10dfc40af`（`ErrRebuildIntentOwnedByDifferentOps` sentinel + handler `intctrlutil.NewFatalError` wrap）。
+2. 失败 OpsRequest 留 intent residue 挡住后续 rebuild — fix `2e129834a`（lenient `CleanupRebuildIntentByOpsUID` + `cleanupRebuildIntentOnFailure` hook）。
+3. tmp PVC 还没 bind 时 `getRestoredPV` fatal、cleanup 撞 InstanceSet hot-annotation conflict 不 retry — fix `514214ac9`（`NewErrorf(ErrorTypeNeedWaiting,...)` + `retry.RetryOnConflict`）。
+4. tmp PVC cleanup 之后 helperPV label discovery 沉默失败 — fix `b99890fbc`（`getOrDiscoverHelperPV` 把 intent annotation pvName 当 truth）。
+
+在 49-sample baseline 已 clean 的前提下，第四+五层每多 push 一档 strength（chaos / 并发 / 同-cluster 高密度），就抓出一类没浮出来的 contract gap。这也是本文 ship 决策"二段判定"的直接反例：满足"产品 fail = 0"还不够，**必须把"扩展强度"作为一个独立的 normative 维度**，否则 baseline-only ship 等于把 race 遗留到生产。
+
+### Trial-loop wrapper（可复现）
+
+```bash
+NS=valkey-rebuild-race-r1
+ART=artifacts/rebuild-race-fix-r1
+mkdir -p "$ART"
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  echo "=== Trial $i ==="
+  ./tests/rebuild.sh "$NS" "$CLUSTER-$i" 2>&1 | tee "$ART/trial-$i.log"
+  rc=${PIPESTATUS[0]}
+  if [ $rc -ne 0 ]; then
+    echo "FAIL on trial $i — stopping for forensics, namespace preserved"
+    break
+  fi
+done
+```
+
+第 10 个 trial 内嵌 controller-restart chaos gate（触发依据是 IS annotation transition + pod Ready=False，命令见 `addon-controller-crash-resilience-guide.md` 案例附录）。
+
+### Forensics grep（验收硬条件）
+
+```bash
+grep -E 'PersistentVolume "" not found|owned by ops|empty HelperPVName' \
+  "$ART"/trial-*.log "$ART"/controller.log 2>/dev/null | wc -l
+# 预期 0
+```
+
+```bash
+kubectl -n "$NS" get pvc -o yaml | yq '.items[] | {name: .metadata.name, vol: .spec.volumeName}'
+# 每个 source PVC 的 volumeName 都应该指向 helper PV（带 rebuild-from / rebuild-tmp-pvc 标记），而不是 default-provisioned 名字
+```
+
+```bash
+kubectl get pv -o yaml | yq '.items[]
+  | select(.metadata.labels."operations.kubeblocks.io/rebuild-tmp-pvc")
+  | {name: .metadata.name, claimRef: .spec.claimRef, reclaim: .spec.persistentVolumeReclaimPolicy}'
+# helper PV reclaim policy 必须等于推断出来的原值（这次 lane = local-path 默认 Delete）
+```
+
+### 测试 artifacts
+
+- 完整 e2e harness：`apecloud/kubeblocks-tests/valkey/tests/rebuild-ops.sh`（commit `18817ec`），含 O01-O04 strength lane。
+- 完整 evidence bundle：`artifacts/valkey-phase6-rebuild-fix-20260503-2023/`（baseline + chaos gate）+ `artifacts/valkey-rebuild-ops-20260503-2312-n20/`（follow-up 240/0/0 final tally）。
+- 关联 fix PR：apecloud/kubeblocks#10191（关闭 issue #10190 的 12 类 contract gap，4 类是这五层矩阵的最后两层逼出来的）。
+- 关联 self-audit：`apecloud/kubeblocks-tests/valkey/COVERAGE.md`（同 commit `18817ec`），列了 P0/P1/P2 扩展 backlog。
+
 ## 相关主题
 
 - [`docs/addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md)
 - [`docs/addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md)
 - [`docs/addon-controller-crash-resilience-guide.md`](addon-controller-crash-resilience-guide.md)
+- [`docs/addon-pvc-rebind-via-workload-intent-guide.md`](addon-pvc-rebind-via-workload-intent-guide.md) — 第四+五层 chaos / dense-follow-up 触发的 contract 体系本身。
+- [`docs/addon-design-contract-review-during-xp-guide.md`](addon-design-contract-review-during-xp-guide.md) — XP review-阶段抓到的另外 8 类 contract gap，与本附录 4 类合起来是同一个 fix 周期里的 12 类总样本。
 - [`docs/addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md)

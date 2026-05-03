@@ -165,8 +165,76 @@ Valkey ship-readiness G4 验证的是 KubeBlocks 控制器在 Valkey OpsRequest 
 - 验证脚本：`tests/g4-controller-crash.sh`
 - 验证环境：k3d `kb-local`，KubeBlocks `1.2`，Valkey addon rev 57
 
+## 案例附录：Valkey RebuildInstance — cleanup-timing 窗口 controller restart
+
+apecloud/kubeblocks PR #10191 的 e2e 验证里加了一个特定的 controller restart 场景：在 OpsRequest 已经清掉自己写在 InstanceSet 上的 rebuild intent annotation 之后、但新 target pod 还没 Ready 之前，主动重启 KB controller，验证 OpsRequest 不会因为内存里"in-flight 状态"丢了而把已收敛的 PVC 绑定改回去。本附录给具体的触发命令和 pass 条件。
+
+### 现场设置
+
+- KB 控制器 image：`apecloud/kubeblocks:rebuild-fix-20260503-2312`（PR #10191 18-commit branch 编译产物）。
+- Valkey cluster：1 primary + 2 replicas，复用 `kubeblocks-tests/valkey/tests/rebuild.sh` baseline 数据 + targeted slave disruption。
+- Trial 编号：第 10 个 trial 专门用来插入 chaos restart，前 9 个保持 baseline 形态。
+
+### 触发 chaos restart 的 polling 循环
+
+不依赖 controller 日志关键字 — 触发依据是 InstanceSet annotation 实时 transition `present → absent` AND target pod `Ready=False`：
+
+```bash
+INTENT_KEY="operations.kubeblocks.io/rebuild-instance-pvc-overrides"
+RESTART_TRIGGERED=0
+for i in $(seq 1 60); do
+  intent=$(kubectl -n "$NS" get instanceset "$ITS" \
+    -o jsonpath="{.metadata.annotations['operations\.kubeblocks\.io/rebuild-instance-pvc-overrides']}")
+  ready=$(kubectl -n "$NS" get pod "$REBUILT_POD" \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
+  if [ -z "$intent" ] && [ "$ready" != "True" ]; then
+    kubectl -n kb-system rollout restart deploy/kubeblocks
+    RESTART_TRIGGERED=1
+    break
+  fi
+  sleep 1
+done
+```
+
+`RESTART_TRIGGERED=1` 后捕获 IS annotation snapshot 作为 before-restart 证据，再每 10s 抓一份 after-restart 直到 pod Ready：
+
+```bash
+kubectl -n "$NS" get instanceset "$ITS" -o yaml > "$ART/its-before-restart.yaml"
+for i in 1 2 3 4 5 6 7 8 9; do
+  sleep 10
+  kubectl -n "$NS" get instanceset "$ITS" -o yaml > "$ART/its-after-restart-${i}.yaml"
+  if kubectl -n "$NS" wait --for=condition=Ready pod/"$REBUILT_POD" --timeout=5s 2>/dev/null; then
+    break
+  fi
+done
+```
+
+### 4 项终态验证
+
+- OpsRequest 终态 `Succeed`（不是被 controller restart 卡在 Running）。
+- 目标 source PVC `spec.volumeName` 等于 helper PV name（chaos restart 没让 binding 回退）。
+- helper PV reclaim policy 等于推断出来的原值（不是被反复改写）。
+- IS annotation 全周期没有 `operations.kubeblocks.io/rebuild-instance-pvc-overrides`（chaos restart 也没让 intent 复活）。
+
+### 观察结果
+
+- Trial 10 单次 PASS。`restartTriggered=1`，monitor 抓到 `intent_present=yes → no` + `pod_ready=False` 同时成立才打的 restart，restart 后 pod 在两轮 reconcile 内重新 Ready，前 9 个 trial 累计 0 个 race-related 错误，第 10 个 trial 维持同样的 0 错误。
+- Phase 6 N=10 acceptance + 同 cluster 多轮 follow-up（N=5 / N=10 / N=20）一共 84+ 个 valid sample，全程 0 个 `PersistentVolume "" not found`、0 个 source PVC 最终绑到非 helper PV。
+
+### 结论
+
+- 一个有效的 controller crash resilience 测试不应该靠 controller 日志关键字判定 restart 时机 — 日志是观测信号，不是设计契约本身。靠 CR 上可观测的状态字段（这里是 InstanceSet annotation transition）作为触发依据，得到的证据是不可伪造的。
+- "测试期间 controller 没挂 = OpsRequest desired state 在 CR 上完整" 是必要不充分。必须显式插入 chaos restart 才有办法回答"挂了能不能继续"。
+
+### 测试 artifacts
+
+- 触发脚本：`kubeblocks-tests/valkey/tests/rebuild-ops.sh` 的 O02-chaos-gate 段（commit `18817ec`）。
+- 完整 evidence bundle：`artifacts/valkey-phase6-rebuild-fix-20260503-2023/trial-10-controller-restart/`。
+- 关联 fix PR：apecloud/kubeblocks#10191（commit chain `10dfc40af` → `b99890fbc` 关闭 4 类 contract gap）。
+
 ## 相关主题
 
 - [`docs/addon-bounded-eventual-convergence-guide.md`](addon-bounded-eventual-convergence-guide.md)
 - [`docs/addon-ops-restart-troubleshooting-guide.md`](addon-ops-restart-troubleshooting-guide.md)
 - [`docs/addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md)
+- [`docs/addon-pvc-rebind-via-workload-intent-guide.md`](addon-pvc-rebind-via-workload-intent-guide.md) — PR #10191 关闭的 contract 体系，本附录的设计 prerequisite。
