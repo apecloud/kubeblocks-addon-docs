@@ -1,5 +1,11 @@
 # Addon Bootstrap Role Publish 指南
 
+> **Audience**: addon dev / test 工程师，需要排查 primary 角色 / endpoint / VIP 误判时
+> **Status**: stable
+> **Applies to**: 任何 KB addon（HA topology 含 primary/secondary 角色概念的引擎）
+> **Applies to KB version**: any（role truth vs publish chain 是 K8s addon 通用问题，跨 KB 版本一致）
+> **Affected by version skew**: 不受 KB 版本影响 — bootstrap 初期 role truth 发布与 KB controller / endpoint controller 的相对 ordering 是 K8s 通用契约
+
 本文面向 Addon 开发与测试工程师，聚焦一个经常被混读的问题：当 primary service、pod role label、EndpointSlice 或 VIP reachability 表现异常时，问题不一定先出在 service 或 controller publish 链路，也可能更早出在 bootstrap 初期的 role truth 发布。
 
 正文只写通用方法论，不绑定某一个引擎。

@@ -1,5 +1,11 @@
 # Addon 控制面选主收口指南
 
+> **Audience**: addon dev / test / TL，特别是设计或重构 HA 选主路径的工程师
+> **Status**: stable
+> **Applies to**: 任何 KB addon（HA topology 含 primary/secondary 选主语义的引擎）
+> **Applies to KB version**: any（control-plane 收口是设计原则，与 KB 版本解耦）
+> **Affected by version skew**: 不受 KB 版本影响 — role truth / publication truth / fencing truth 三类 truth 的单点收口是设计原则，跨 KB 版本一致
+
 本文面向 Addon 开发与测试工程师，聚焦一个通用主题：当实例角色判断、对外发布、fencing、failover / switchover 分散在多个脚本或组件里时，如何把选主职责收口到单一 control-plane。
 
 正文只写通用方法论，不绑定某一个引擎。具体引擎实现、命令、案例结论应放在独立案例材料中。

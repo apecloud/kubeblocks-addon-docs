@@ -1,6 +1,12 @@
 # Addon Ops Restart 排障分流指南
 
-本文面向 Addon 开发与测试工程师，聚焦一个常见但容易被混读的问题：当 restart / rolling restart / pod rolling update 看起来“卡住”时，先不要立刻进入 Pod 级进度分析，而要先判断这条 `OpsRequest` 是否已经真正进入执行体。
+> **Audience**: addon dev / test / 排障工程师，遇到 OpsRequest restart 看起来卡住时
+> **Status**: stable
+> **Applies to**: 任何 KB addon（OpsRequest queue/execute 分层是 KB 通用控制流）
+> **Applies to KB version**: KB 1.0.x / 1.1.x / main（OpsRequest queue 入口与执行体内部状态机契约跨 1.x 稳定）
+> **Affected by version skew**: 不受 KB 版本影响 — 'queue 入口未放行' vs '执行体内部' 的两段式排障逻辑跨版本一致
+
+本文面向 Addon 开发与测试工程师，聚焦一个常见但容易被混读的问题：当 restart / rolling restart / pod rolling update 看起来"卡住"时，先不要立刻进入 Pod 级进度分析，而要先判断这条 `OpsRequest` 是否已经真正进入执行体。
 
 正文只写通用方法论，不绑定某一个引擎。引擎相关实现、现场、样本结论放在独立案例材料中。
 

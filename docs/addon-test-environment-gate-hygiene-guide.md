@@ -1,5 +1,11 @@
 # Addon 测试环境 Gate 卫生指南
 
+> **Audience**: addon test 工程师 / TL，配置 runner / cleanup gate / pre-restart 验证流程时
+> **Status**: stable
+> **Applies to**: 任何 KB addon 测试工作流（cluster-level gate 是测试 hygiene 通用要求）
+> **Applies to KB version**: any（环境就绪契约与 KB 版本解耦）
+> **Affected by version skew**: 不受 KB 版本影响 — environment gate hygiene 跨 KB 版本一致
+
 本文面向 Addon 测试工程师与技术负责人，重点解决"机器/容器重启之后、跑测试之前，测试环境本身能不能用"的问题。它不是关于产品 / addon 的成功语义，而是关于**让 first blocker 不要落在测试环境本身**。
 
 ## 适用场景

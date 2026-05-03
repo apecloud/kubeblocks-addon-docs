@@ -1,5 +1,11 @@
 # Addon Reconfigure 开发与排障指南
 
+> **Audience**: addon dev / TL，需要实现或排查参数 reconfigure 路径
+> **Status**: stable
+> **Applies to**: 任何 KB addon 的参数变更能力（含 dynamic 与 static 参数路径）
+> **Applies to KB version**: KB 1.0.x / 1.1.x（reload Action / dynamicParameters 契约稳定）；KB main / 1.2 reconfigure interface 重构跨版本演化与排障详见 `addon-reconfigure-version-skew-guide.md`（PR #13 待 land）
+> **Affected by version skew**: 是 — reconfigure interface 在 KB 1.0/1.1 vs KB main/1.2 不同（PR #10100 / #10109）；本 guide 主体写 1.0/1.1 路径，跨版本演化见 reconfigure-version-skew
+
 本文面向 KubeBlocks Addon 开发者，例如 MariaDB、PostgreSQL、Redis、Valkey 等 Addon 的维护者。
 
 目标是说明 Addon 在实现参数变更能力时，如何区分动态参数和静态参数，如何声明 `dynamicParameters` 与对应的 live-apply 执行路径，以及当 reconfigure 行为不符合预期时如何排查。

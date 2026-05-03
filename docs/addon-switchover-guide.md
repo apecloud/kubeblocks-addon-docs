@@ -1,5 +1,11 @@
 # Addon Switchover 开发与幂等性指南
 
+> **Audience**: addon dev / TL，需要实现 switchover / failover lifecycle action
+> **Status**: stable
+> **Applies to**: 任何 KB addon（HA topology 含 primary 切换语义的引擎）
+> **Applies to KB version**: any（lifecycle action 幂等性契约跨 KB 版本一致）
+> **Affected by version skew**: 不受 KB 版本影响 — switchover 幂等性原则、命名约定、错误处理跨 KB 版本稳定
+
 本文面向 KubeBlocks Addon 开发者，重点总结 switchover / failover 生命周期动作中的设计原则、幂等性语义、常见坑。引擎相关内容只放在案例附录中。
 
 ## 先用白话理解这篇文档
