@@ -4,7 +4,7 @@
 > **Status**: stable
 > **Applies to**: 任何在 macOS / Linux 单机用 k3d 跑 addon 测试的工作流
 > **Applies to KB version**: any（host 层工具，与 KB 版本解耦）
-> **Affected by version skew**: no（k3d v5 label 变更已在工具层处理）
+> **Affected by version skew**: host precheck 本身 no；测试结论 yes（跨 team 复用别人 k3d 时，controller / CRD / addon definitions 可能不是同一目标栈）
 
 本文面向在 k3d 上跑 KubeBlocks addon 测试的开发、测试、本机 ops 工程师。新建 / 复用 k3d 集群跑 smoke / chaos 之前，**主机层面的 k3d 集群健康必须先快速 snapshot 一遍，再启 runner**。本文给出 host precheck 的工具、三档输出、已知坑、runner 集成 pattern，以及跨主机 ops profile 的写法。
 
@@ -25,6 +25,31 @@
 - 有多个 k3d 集群同主机共存（kbe-dev / kbe-smoke / oracle-test 这种）
 - runner 在 T1 / 创建集群 / kubectl get ns 阶段就 timeout / EOF / context deadline
 - 多人共享同一台测试机，要快速判定「是不是别人的集群把 host 吃满了」
+
+## Team-owned k3d 规则
+
+每个 engine / team 默认只在自己明确拥有的 k3d 集群里跑 smoke / chaos。别人的 k3d 即使空闲、API 正常，也不能拿来当正式验收环境。只有必要诊断时可以临时借用，并且借用前必须知会该 k3d 的 owner。
+
+原因不是礼貌问题，而是 evidence 可信度问题。一个 k3d 集群里通常同时存在：
+
+- KB controller image / chart revision
+- 已安装 CRD 的 storage version
+- cluster-scoped addon definitions
+- 历史 Helm release / managedFields / finalizer 残留
+- 镜像缓存、StorageClass、BackupRepo、dataprotection 状态
+
+这些状态会被上一条测试线长期改变。跨 team 借用时，最容易出现「新 CRD + 旧 controller」「旧 addon definitions + 新 chart」「已被 controller 接管的 SSA field manager」这类版本偏移，最后把环境问题误判成 addon runtime 问题。
+
+正式 runner 的 preflight 必须写清楚：
+
+- k3d context / cluster name
+- owner / 用途
+- KB controller image + chart version
+- 关键 CRD schema / storage version
+- addon definitions 的来源栈
+- `git status --short` 与实际命令
+
+如果 context 不是本 team 拥有的集群，runner 应该停下，先创建或切换到本 team 的 k3d。只有必要诊断并且已经知会 owner 时可以例外；artifact/meta 必须明确写成 borrowed k3d / diagnostic，不得写成 release acceptance。
 
 ## 工具：scripts/k3d-precheck.sh
 
@@ -90,6 +115,19 @@ docker ps --filter "label=app=k3d" --filter "label=k3d.cluster=${cluster}"
 - 用临时文件替代关联数组聚合 per-cluster 结果
 
 本工具走 zsh + 临时文件方案。详细 portability 坑见 [`addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md)。
+
+### 坑 4: 借用别人的 k3d 会把版本偏移伪装成 addon bug
+
+同一台 host 上有多个 k3d 时，不要看到某个集群 API OK、资源空闲就直接复用。集群 owner 不同，里面的 KB controller / CRD / addon definitions 很可能不是当前测试目标。
+
+典型误判链路：
+
+1. runner 在别人的 k3d 里安装或复用 addon。
+2. cluster-scoped definitions 被旧 controller reconcile，field manager / finalizer / status 字段开始漂移。
+3. 新测试再叠加新 chart 或新 CRD，出现 SSA conflict、字段持久化丢失、role status 不回填。
+4. 调试者只看 SQL / Pod 现象，误把环境 skew 当作 addon runtime failure。
+
+修法：每条 engine 线维护自己的 k3d。需要 A/B 对照时，优先新建一个带明确名字的临时 k3d（例如 `<engine>-kb<version>`）。确实需要借用 team 之外的长期环境时，先知会 owner，再把结论降级为 diagnostic。
 
 ## Runner 集成 pattern
 
@@ -210,9 +248,11 @@ k3d-kb-local-serverlb：  3.6 MiB / 7.75 GiB limit
 
 | 集群 | 节点拓扑 | KubeBlocks | 用途 / 备注 |
 |---|---|---|---|
-| `kbe-dev` | 1 server（control-plane）| v1.0.2 | addon 基线复测，当前供 SQL Server 线 A1 |
+| `kbe-dev` | 1 server（control-plane）| v1.0.2 | KBE team 环境；其他 engine 不作为正式 smoke / chaos 环境 |
 | `kbe-smoke` | 1 server + 1 agent | v1.0.3-beta.5 | KBE Enterprise 开发环境（`kb-cloud` namespace）；**不要未经授权 pause/stop** |
 | `oracle-test` | 1 server + 1 agent | v1.0.0 | Oracle addon 专用；**不要碰** |
+
+> 2026-05-03 修正：`kbe-dev` 不作为 SQL Server 正式 smoke / chaos 环境。SQL Server 使用自己新建并标注 owner / KB version / addon stack 的 k3d，例如 `mssql-kb103b5` 这类独立 context。历史在 `kbe-dev` 里跑过的 SQL Server 资源必须清掉，相关结果只能作为 diagnostic，不作为 release acceptance。
 
 **典型资源水位**（2026-05-02 baseline，无 mssql / oracle pod 负载）：
 
@@ -246,11 +286,12 @@ oracle-test            OK     78ms      27.6%    1566       no
 - [ ] `scripts/k3d-precheck.sh` 在 `kubeblocks-tests` 仓里 + executable
 - [ ] 在自己机器上跑过一次 `./k3d-precheck.sh`，确认输出格式正常
 - [ ] 在自己机器上跑过 `--json` + `--quiet` 模式，确认 exit code 符合预期
+- [ ] runner 的 artifact/meta 固定记录 k3d owner / context / KB controller image / CRD schema / addon input stack
 - [ ] 在 runner 里加 pre-hook（`--quiet` 或 `--json` 落盘）
 - [ ] chaos / 长跑场景的 evidence 目录里能找到 `host-precheck.json` snapshot
 - [ ] 跨主机 ops profile 那节已有自己机器的视角
 
-## 7 条硬规则
+## 8 条硬规则
 
 1. host precheck 必须在 runner 创建集群 / 装 KB 之前跑，不能放后面。
 2. precheck 失败必须**先停 runner**，不能因为"也许是暂时的"就继续 — 环境不健康跑出来的失败无法归类。
@@ -259,6 +300,7 @@ oracle-test            OK     78ms      27.6%    1566       no
 5. precheck 不允许做 destructive 动作（不许 stop / restart / delete），只读 snapshot。
 6. STUCK 检测必须有时间下限（默认 60min），避免把"刚起"误判 stuck。
 7. JSON 输出必须 stable（字段名稳定、顺序稳定），便于 runner / dashboard 长期消费。
+8. 正式 smoke / chaos 只能跑在本 team 拥有的 k3d；必要时借用别人的 k3d 必须先知会 owner，且只能做 diagnostic，不能做 release acceptance。
 
 ## 反模式
 
@@ -269,6 +311,7 @@ oracle-test            OK     78ms      27.6%    1566       no
 | precheck 工具自己装 destructive cleanup（自动 delete stuck cluster） | 误删别人的工作集群，权限 escalate 到 ops 层 |
 | 用 docker stats 不带 cluster filter | 一个集群的水位被算到其他集群头上 |
 | precheck JSON 字段不稳定 | dashboard / runner 长期集成会反复 break |
+| 借用其他 team 的 k3d 跑正式验收 | controller / CRD / addon definitions 版本偏移，结论污染 |
 
 ## 待补 (TBD)
 
