@@ -271,6 +271,62 @@ oracle-test            OK     78ms      27.6%    1566       no
 
 三集群合计约 8.3 GiB，host 剩余 ~3.4 GiB（无大规模 addon 测试时）。最小内存机器（11.67 GiB），3 副本 AG 测试（6-8 GiB）需协调释放资源。
 
+## 资源容量门控（per-line × L0-L3 硬阈值）
+
+precheck 不只看"水位百分比"。每条 addon line 在不同测试强度下对 host 的资源 footprint 不一样，单一 floor 不可行（实测 cross-line variance 5 倍）。**开测前必须按 line × level 二维表查 host 资源是否够，不够直接 ITSP，不算 addon fail**。
+
+### L0-L3 framework definition
+
+借鉴 Oracle line 的"可执行环境等级"分类（James 2026-05-04 提议）：
+
+- **L0 静态 / read-only**：静态分析、cue/tpl 校验、文档 lint。Mac local 无资源风险，可与其它 suite 并行
+- **L1 标准 HA topology**：默认 N replica HA（引擎差异 1 / 2 / 3 replica）。可在干净本机跑，**前置 host-precheck 必须通过**，不能与其它 high-load suite 并行
+- **L2 chaos / 单 chaos overlay**：L1 + chaos 注入。**需要干净本机 exclusive window**，跑前/跑后都落 host-precheck artifact
+- **L3 strength（N=10 / 24h soak / 大数据 / 多 chaos 叠加）**：建议**远端或大资源 host**；本机只做 dry-run / 静态验证
+
+### Per-line × L0-L3 二维表
+
+数据来源：5 line owner 实测 baseline (Helen / James / Noah / Alice 2026-05-04)。**实测**列表示该 line 真跑过该等级；**估算**表示按 pod request math 推算未真跑。
+
+| Line | L1 standard HA | L2 chaos | L3 strength | 关键 caveat |
+|---|---|---|---|---|
+| **MariaDB** | 8 CPU / 16 GiB / 120 Gi (实测，3-replica async/semisync) | 12 CPU / 24 GiB / 200 Gi (部分实测，C7 chaos-mesh-unavailable-skip) | 16+ CPU / 32+ GiB / 500 Gi (估算，未实测 N=10 / 24h) | host 累积超 reserve 时 cell-2 cascade reactive overload (#208 R2) |
+| **Oracle** | 4 CPU / 12 GiB / 60 Gi (实测，2-replica baseline + 降 SGA/probe 后) | 4 CPU / 12 GiB / 60 Gi exclusive window (实测) | 未实测，Mac local 11.67 GiB 已知不够；conservative 8 CPU / 24 GiB / 100 Gi remote | **L1+ Mac local 必须 exclusive window**；T10b 2→3 触发 API starvation / NodeNotReady / OOM |
+| **OceanBase** | 3 × 4 GiB OB pod slots + KB overhead (实测 MEM only，CPU/disk 未实测) | repl chaos 2×4 GiB sequential (实测，C09 N=10)；dist chaos 未实测 | 未实测同时拉多 4 Gi cluster；repl N=10 是 sequential（10 cycles 顺序创建/清理） | server allocatable ~7.75 GiB / worker ~6.14 GiB；dist 需 3×4 GiB scheduling slots，Machine B 不满足 |
+| **Valkey** | 2 CPU / 6 GiB host (实测，4-node k3d on M-series 24 GiB / 8 CPU) | L1 + 30% reserve (实测) | N=20 dense rebuild 4-node 全过 (CPU < 60%) (实测)；24h soak 未实测 | 4-node k3d 整 host 跑 80+ smoke cases on Mac M-series 24 GiB |
+
+**Caveats（不可忽略）**：
+
+1. **实测 vs 估算严格分清**：估算数据**不能当 hard gate** 拒绝合法 test。表格内 `(实测)` / `(估算)` / `(部分实测)` 标签精确到 cell。
+2. **Variance 5x → 单 floor 不可行**：MariaDB L1 16 GiB vs Valkey L1 6 GiB，单一 host floor 会拒绝 valkey 合法 test 或放过 mariadb 资源不足 test。retrofit 用 line × level 二维表查。
+3. **Mac M-series 24 GiB / 8 CPU 是硬上限**：所有 line L3 strength 在 Mac local 不可行；必须 remote / 大资源 host。
+4. **L1+ exclusive host window** (Oracle 强制 / 其它 line 推荐)：同机不允许并行 high-load suite；并行直接 false-negative 风险。
+5. **CPU/disk 未实测的 cell 不要 promote 成 hard gate**：例如 OceanBase L0/L1 当前只有 MEM 实测数据，CPU/disk 标"未实测"，gate 仅按 MEM check，不能扩展到 CPU/disk。
+
+### 失败归类原则
+
+资源不足 → **不算 addon fail**：
+
+- precheck fail → runner ITSP（test was not started, not a failure）
+- 写 `blocked` / `ITSP` 进 evidence pack，不写 `FAIL`
+- 等 host 资源到位再重跑；不要立刻怪罪 addon code
+
+precheck pass + addon test 真的失败 → **算 addon fail**，进失败归类正常流程。
+
+这条边界很关键：**资源不够 = 测试没启动；测试没启动 ≠ addon 故障**。混淆两者会污染 addon 失败统计，让真 addon bug 被 noise 淹没。
+
+## 跨 team reserve discipline
+
+在共享 host 跑 addon 测试时，单 line 不能吃满 host — 必须留 reserve 给其它 team 的同时 work。
+
+**discipline 5 条**：
+
+1. **开测前 host 总资源至少留 30% reserve**（CPU / MEM / disk 都按）。低于这条 → 推迟测试或先 ping 其它 team 协调
+2. **每条 line 在 host 上的 footprint 必须按"自己 L1 baseline + 30% buffer"算**；超出该 footprint 的 ops（cluster scale / chaos overlay）需要先确认其它 team 不在跑
+3. **Tier-2+ chaos 必须 exclusive host window**（per James Oracle 实证）：同机不允许并行 high-load suite，并行 → 一律 ITSP
+4. **测试结束必须 cleanup namespace + cluster + PVC + PV**（参考 [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) cleanup gate）— 残留资源是其它 team 的 false-negative 风险
+5. **stuck Terminating > 5 min** 是 cross-team residue alert：发现 stuck 必须先排查（不一定是自己 team 残留），不能直接 force-delete
+
 ## 适用边界
 
 - macOS arm64 / x86_64（已验证）
