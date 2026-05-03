@@ -132,6 +132,7 @@
 ### Methodology
 
 - [`docs/cases/methodology/evidence-inflation-in-csi-durability-debate-case.md`](cases/methodology/evidence-inflation-in-csi-durability-debate-case.md) — 04-28 MariaDB #396 CSI durability 讨论中的 3 次 inflation 与 3 次撤回（动机 narrative / N=1→average / 间接旁证→系统性证伪），属 [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) 实证补充
+- [`docs/cases/methodology/extension-strength-finds-real-race-2026-05-03-case.md`](cases/methodology/extension-strength-finds-real-race-2026-05-03-case.md) — 跨 3 条 addon 线 (Valkey / OceanBase / SQL Server) 在小样本验收全 clean 状态下，按 Rule 2 扩展正交维度（density / concurrency / chaos overlay / failure window）逼出 contract-level race（4 个 Valkey gap + OB 700ms dual-primary + SQL Server commit-unknown），属 [`addon-test-baseline-standard-guide.md`](addon-test-baseline-standard-guide.md) 第 4.3 节 Expansion Strength Mandate 支撑案例
 
 ## 使用建议
 

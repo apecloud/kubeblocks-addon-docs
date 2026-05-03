@@ -136,9 +136,15 @@ Each addon's strength criterion section must declare:
 2. The N (or soak duration) used + rationale tied to prior failure rate
 3. Whether the evidence schema can distinguish commit-unknown from real data loss (mandatory for any writes-during-chaos category)
 
-**Reference cross-engine case** (canonical example of expansion strength finding real race):
+**Reference cross-engine cases** (canonical examples of expansion strength finding real race):
 
-Valkey RebuildInstance vs InstanceSet PVC ownership race — found by Phase 6 controller-restart chaos point + N=20 dense same-cluster validation, fixed in apecloud/kubeblocks PR #10191 (18 commits, 84+ valid samples, 0 race-related errors). Three-stage strength (N=5 + N=10 + N=20) + chaos gate using InstanceSet annotation transition instead of controller log scrape established the cross-engine pattern.
+See `cases/methodology/extension-strength-finds-real-race-2026-05-03-case.md` for the consolidated 3-line evidence pack:
+
+1. Valkey RebuildInstance — 49-sample clean baseline expanded by density + concurrency + restart-window axes surfaced 4 contract-level gaps; closed via PR #10191 follow-up commits with sentinel / typed-error contract + N=20 dense gate.
+2. OceanBase C09 — small-N clean expanded by dense replay + acked-write injection surfaced ~700ms dual-primary acked-write divergence window.
+3. SQL Server CH50 — small-N clean expanded by density + commit-window precise failure injection surfaced commit-unknown ambiguity (server-side committed but client cannot distinguish).
+
+In all three lines the original small-sample acceptance was clean. The contract gaps only became visible after expansion along orthogonal dimensions — proof that "small-sample clean ≠ contract correct" is doctrine backed by hard evidence, not abstract policy.
 
 ### 4.4 Artifact pack format
 
