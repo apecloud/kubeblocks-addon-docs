@@ -98,14 +98,47 @@ Each addon's TEST_CATALOG.md (or equivalent) must self-describe along 5 dimensio
 4. **Artifact / log standard** — evidence pack schema, naming convention, sha256 attestation
 5. **Cleanup discipline** — how Rule 1 is implemented in trap / collect_evidence / cleanup helpers
 
-### 4.3 Strength criterion (Rule 2 — work-in-progress)
+### 4.3 Expansion Strength Mandate (Rule 2 — normative)
 
-For probabilistic bugs, the verification N must be selected based on prior failure rate, not fixed N=3. Two emerging strength categories:
+Single-cycle PASS is NOT production-ready. Every addon must produce strength evidence before release.
 
-- **Data consistency strength** (e.g. MariaDB persistent stress N=12 sample classification)
-- **Environment attribution strength** (e.g. Oracle T10b host-pressure N=2 cycle)
+**Required strength evidence ladder:**
 
-Until Rule 2 lands a formal tier table (pending baseline addons producing failure-rate samples), each addon's strength criterion section must declare which category each strength claim falls in, and the N used + rationale.
+1. N=1 functional verification — case design works, basic PASS
+2. N=10 strength level 1 — repeated invocation under same conditions, all PASS, evidence pack per cycle
+3. N=20 strength level 2 — for high-risk cases (data consistency, HA failover, switchover, write-during-chaos), 20 cycles all PASS
+4. 24h+ soak with random chaos injection — background workload + 10-60 minute random chaos events for full 24 hours, no acked-write loss, role label converges within bounded time after each event
+5. Multi-chaos overlay — at least one combination test (kill primary + reconfigure simultaneous, or kill primary + network partition simultaneous), verify cluster degrades gracefully
+
+**Expansion must add new dimensions, not repeat existing cases.** Examples of new dimensions that have caught production-blocking races in field testing:
+
+- Writes during chaos with per-attempt millisecond-level evidence (catches transient dual-primary windows where acked writes go to wrong replica)
+- Three-layer role timestamp (DBMS truth + kbagent emit + KB controller label patch) capture during rolling Day-2 ops (catches role label race with engine state)
+- Strict evidence schema distinguishing client-failed-but-committed from confirmed data loss (catches false-positive bug reports vs real race)
+- Annotation transition gating instead of controller log scraping (catches early failure paths that controller never logs)
+
+**Strength criterion bound to prior failure rate, not fixed N:**
+
+- High-frequency bugs (failure rate above 30 percent pre-fix): N=3 verifies fix; N=10 confirms fix stability
+- Intermittent bugs (failure rate 1 to 30 percent pre-fix): N=20 to N=50 needed for confidence
+- Rare bugs (failure rate below 1 percent pre-fix): N=100 or 24h soak with random chaos preferred
+
+**Strength evidence categories observed in cross-line baseline:**
+
+- Data consistency strength (e.g. MariaDB persistent stress N=12 sample classification)
+- Environment attribution strength (e.g. Oracle T10b host-pressure N=2 cycle)
+- Race window strength (e.g. OceanBase C09 writes during primary kill, 700-millisecond transient dual-primary window)
+- Concurrent contract strength (e.g. Valkey rebuild-ops O02 exactly-one-success + 0 residue + cleanup retry-on-conflict)
+
+Each addon's strength criterion section must declare:
+
+1. Which category each strength claim falls in
+2. The N (or soak duration) used + rationale tied to prior failure rate
+3. Whether the evidence schema can distinguish commit-unknown from real data loss (mandatory for any writes-during-chaos category)
+
+**Reference cross-engine case** (canonical example of expansion strength finding real race):
+
+Valkey RebuildInstance vs InstanceSet PVC ownership race — found by Phase 6 controller-restart chaos point + N=20 dense same-cluster validation, fixed in apecloud/kubeblocks PR #10191 (18 commits, 84+ valid samples, 0 race-related errors). Three-stage strength (N=5 + N=10 + N=20) + chaos gate using InstanceSet annotation transition instead of controller log scrape established the cross-engine pattern.
 
 ### 4.4 Artifact pack format
 
