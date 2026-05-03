@@ -150,13 +150,47 @@ In all three lines the original small-sample acceptance was clean. The contract 
 
 Each evidence pack must produce `tar.gz` + `sha256` attestation. Loose-file evidence is acceptable as a working stage but not as final artifact for cross-addon comparison.
 
-### 4.5 Pre-flight checks (cross-addon environment hygiene)
+### 4.5 Pre-test resource readiness gating (Rule 0 — runs before all other gates)
 
-Every test run must observe these pre-flight checks (or document that they're skipped with reason):
+Before any test runner starts a suite, it must observe a Rule 0 readiness gate covering both environment hygiene AND resource sufficiency. Failing any gate must abort the run with a clearly classified non-execution exit (not a test failure), so that resource-induced false negatives never enter the result corpus and so that other teams sharing the same host are not impacted.
+
+This gate combines two layers:
+
+**A. Environment hygiene** (apply to every run regardless of strength tier):
 
 - Host-level k3d snapshot (`addon-k3d-host-precheck-guide.md`)
 - Backup/restore prereq (`addon-k3d-backup-restore-prereqs-guide.md`) — including the **Docker Desktop restart non-persistence caveat**: `mount --make-rshared /` on k3d node containers does not survive Docker Desktop restart; backup tests after a restart must re-execute this fix
 - Hostname declaration when discussing or claiming any cluster
+
+**B. Resource sufficiency and cross-team contention checks** (mandatory for every run):
+
+- Host CPU and memory headroom — current free CPU and free MEM on the host must exceed the strength tier's minimum reserve (see L0–L3 table below)
+- Disk reserve — free disk on the workspace volume must exceed the strength tier's minimum (large evidence packs and dense replays consume disk)
+- Kubernetes API server health — `/readyz` probe must return ok; sustained API server p99 latency outside baseline indicates control-plane instability that will produce false negatives
+- Pending pod count — pending pods across all namespaces must be below a threshold (sustained backlog signals scheduler / image / CSI saturation that will starve the test)
+- Stuck-Terminating residue — any pod stuck in Terminating beyond a bounded window indicates cross-team residue or finalizer deadlock; the run must abort and surface the residue rather than masking it
+- Shared-resource health — BackupRepo, CSI plugin, snapshot controller, and any other namespace-shared infrastructure must be Running / healthy
+
+**Strength tier resource baseline (L0–L3)**:
+
+The minimum host CPU / memory / disk reserve required scales with the strength tier of the run. The per-line × L0–L3 resource baseline two-dimensional table is codified in [`addon-k3d-host-precheck-guide.md` resource-capacity gating section](addon-k3d-host-precheck-guide.md#resource-capacity-gating); each engine line contributes its measured / conservative / unmeasured cells. This guide does not duplicate the data; it holds the framework. Run owners must consult the host-precheck guide at run time and surface the host snapshot at the chosen tier in the evidence pack. Cross-team reserve discipline is documented at [`addon-k3d-host-precheck-guide.md` cross-team reserve discipline section](addon-k3d-host-precheck-guide.md#cross-team-reserve-discipline).
+
+| Tier | Description | Reference |
+|---|---|---|
+| L0 smoke | Single replica, default topology | See [resource-capacity gating](addon-k3d-host-precheck-guide.md#resource-capacity-gating) per-line × L0–L3 table |
+| L1 standard HA | Default HA topology at line's declared default replica count | See same |
+| L2 chaos | Chaos injection, single chaos overlay; many lines require an exclusive host window at L2+ | See same |
+| L3 strength | N=10 multiplier / 24h soak / large data scale / multi-chaos overlay | See same; many cells unmeasured on local Mac due to hardware cap |
+
+**Cross-line evidence-discipline distinctions for resource baselines** (mandatory framing when reading or contributing to the per-line table):
+
+1. **Request floor vs empirical host baseline**. Pod Kubernetes `requests` are a scheduling floor that operators can set; empirical host CPU / memory / disk reserves are what the host actually needs in order for the run to succeed. The two are not interchangeable. A run cannot infer empirical host baseline from pod request settings, and a host gate cannot be relaxed by lowering pod requests.
+2. **Verified minimum vs conservative gate vs remote target**. Three reserve states must be marked separately. *Verified minimum* means at least one accepted run has succeeded with the cell's reserve. *Conservative gate* means a value chosen safely from existing evidence but not specifically minimised. *Remote target* means a value proposed for an unmeasured tier (typically L3 strength) that has not been validated; remote targets must never be used as hard pass / fail gates for engine / addon defect attribution.
+3. **Measured vs expected vs conditional**. A measured cell came from a real run on a specific topology and host; an expected cell extrapolates to a related topology (e.g. dist-production from repl-dev/test) without a real run; a conditional cell is gated on infrastructure not currently available (e.g. host capacity blocked, snapshot CRD missing). Expected and conditional cells must not be used to claim addon readiness.
+4. **Mac M-series 24 GiB hardware cap is a cross-line constraint at L3 strength**. Multiple engine lines independently reported that L3 strength runs (24h soak, large data scale, dense N over multi-chaos overlay, dist-production HA at higher replica counts) cannot be verified on a local Mac M-series host. L3 strength acceptance requires a remote or large-host gate, not a local Mac. This is not a per-line problem.
+5. **Profile-guard discipline for topology axis expansion**. When an engine line introduces a non-default topology profile (e.g. 2-replica AG instead of 3-replica baseline; replication topology in addition to dist; sharded mode in addition to replication), that profile must be opt-in through an explicit environment flag, the artifact pack name and content must label the profile, the PR body and coverage matrix must label the profile, and the new profile evidence must not silently replace the default-baseline evidence. This prevents non-default-topology evidence from being misread as a regression of the default-topology baseline.
+
+**Why Rule 0**: this gate runs before any test code, evidence collection, or chaos injection. Failures attributable to insufficient host resources or cross-team contamination must not be allowed to be misread as engine / addon defects, and must not be allowed to consume cycle budget that other teams sharing the host need. Rule 0 is non-negotiable; declared skips must record the specific check skipped and the reason in the evidence pack. The five evidence-discipline distinctions above govern how all reserve cells in the host-precheck table are read and contributed to; violating any of them re-introduces the false-negative or attribution drift modes that Rule 0 is designed to prevent.
 
 ### 4.6 Pattern B fork-zombie audit (probe / lifecycle scripts)
 
@@ -236,3 +270,25 @@ This is initial read of current state as of 2026-05-03 — it serves as a starti
 ## Case appendix (cross-engine evidence)
 
 Each addon's self-audit lives at `docs/cases/<engine>/<engine>-test-baseline-audit.md` and provides the engine-specific evidence for compliance with this standard. Cross-engine comparison snapshots may live at `docs/cases/methodology/cross-addon-test-baseline-status-<date>.md`.
+
+### Case appendix: cross-engine expansion strength real-race findings (2026-05-03)
+
+This appendix surfaces, in this guide's body, the engineering proof that Section 4.3 (Expansion Strength Mandate) is doctrine backed by hard cross-engine evidence rather than abstract policy. Full timeline, per-axis decomposition, fix commits, and acceptance evidence packs are kept in `cases/methodology/extension-strength-finds-real-race-2026-05-03-case.md`; this appendix is the entry-point summary that lets readers see the cross-engine usage record without leaving the parent guide.
+
+Three addon test lines, all of which had previously declared their then-current chaos suite "small-sample clean" under Section 4.3 baseline, were required to extend along orthogonal axes per Rule 2. Each line surfaced contract-level race conditions that the original baseline could not have observed.
+
+| Engine line | Original baseline | Axes added (per Rule 2 mandate) | Race surfaced | Closure |
+|---|---|---|---|---|
+| Valkey RebuildInstance | 49-sample acceptance fully clean | density (N=5/10/20) × concurrency × pod-restart-window | 4 contract-level gaps: concurrent rebuild silent retry, failed-OpsRequest intent annotation residue, `getRestoredPV` fatal-on-bind-window, label-discovery silent failure under tmp PVC cleanup | apecloud/kubeblocks PR #10191 follow-up commits `10dfc40af` / `2e129834a` / `514214ac9` / `b99890fbc`, each with sentinel / typed-error contract + unit test pin contract; e2e final 240/0/0 across N=5+10+20 dense |
+| OceanBase chaos C09 | small-N PASS, switchover within SLA | density (dense replay) × client-side acked-write injection | ~700 ms dual-primary acked-write divergence window (old primary fenced but acknowledged client-side write; new primary takeover surfaces divergence on follower) | engine-side fix landed; verified under dense replay with acked-write injection retained as the new strength baseline |
+| SQL Server chaos CH50 | small-N PASS, application-layer consistent | density × commit-window precise failure injection | commit-unknown ambiguity: client receives neither explicit ACK nor explicit fail in the commit window while server-side transaction is committed (idempotency hazard for retry-on-failure clients) | server / driver contract corrected; CH10–CH50 N=10 strength evidence pack `kubeblocks-tests/sqlserver/artifacts/20260503-2348-n10-chaos-ch10-ch20-ch30-kb103b5.tar.gz` (sha256 `2a9de85a08b8d86fcdb57197305d70b77c8a130959962e53861ea605d35da4d8`) verifies post-fix stability |
+
+Three observations carry across all three lines:
+
+1. Original small-sample acceptance was clean. Under traditional ship-readiness criteria the test sets would have been declared sufficient.
+2. The expansion that surfaced each gap was always along a new orthogonal axis (concurrency / density / chaos overlay / failure window / acked-write injection), not repetition of the existing case at higher N.
+3. Every gap was contract level. None was a transient performance jitter or environmental flake. Each closure required a contract change (sentinel, typed error, source-of-truth correction, protocol strengthening), and re-acceptance under dense replay was mandatory before close.
+
+These three findings are the canonical evidence pack referenced from Section 4.3. New addon lines onboarding to this baseline are expected to consult them when judging whether their existing strength evidence is sufficient for ship-readiness.
+
+Cross-engine usage annotations (when an addon team uses this guide to drive their own audit or expansion and reports findings or no-finding verdicts) should be appended to this appendix going forward, per the corpus-wide cross-engine usage annotation convention.
