@@ -20,6 +20,7 @@
 - [`addon-bootstrap-role-publish-guide.md`](addon-bootstrap-role-publish-guide.md) — bootstrap 初期先收 role truth、再发 role label / service / endpoint 的链路
 - [`addon-control-plane-election-guide.md`](addon-control-plane-election-guide.md) — 选主职责收口到单一 control-plane，避免多脚本并行抢拍板权
 - [`addon-reconfigure-guide.md`](addon-reconfigure-guide.md) — 动态 vs 静态参数、`reconfigure.exec` vs legacy `reloadAction`、live-apply 路径排障
+- [`addon-reconfigure-version-skew-guide.md`](addon-reconfigure-version-skew-guide.md) — 跨 KB 版本带（1.0 / 1.1 / 1.2 main）维护 addon 的 reconfigure 演化指南：legacy `paramsdef.reloadAction` vs `cmpd.reconfigure.exec`、silent regression 形态、双写 / 单写 / template variant 三种 portability 套路、6 类 trap 清单 + 测试矩阵
 - [`addon-switchover-guide.md`](addon-switchover-guide.md) — switchover / failover 幂等性，重入下的 candidate 与角色收敛
 - [`addon-tls-guide.md`](addon-tls-guide.md) — TLS 产品语义、明文拒绝正向验证、与 reconfigure / backup / switchover 组合验证
 - [`addon-componentdefinition-upgrade-guide.md`](addon-componentdefinition-upgrade-guide.md) — `ComponentDefinition` 升级时识别 immutable spec blocker、何时走新名字 vs 同名覆盖
@@ -75,6 +76,7 @@
 按文档主题依次列出，含完整 metadata 描述，作为详细 reference：
 
 - [`docs/addon-reconfigure-guide.md`](addon-reconfigure-guide.md)
+- [`docs/addon-reconfigure-version-skew-guide.md`](addon-reconfigure-version-skew-guide.md) — 跨 KB 版本带 (1.0.x / 1.1.x / 1.2 main) 维护同一份 addon 的 reconfigure 演化指南。聚焦三类核心问题：(a) 主推路径切换（legacy `paramsdef.reloadAction.shellTrigger` 在 1.2 main deprecated → 主推 `ComponentDefinition.spec.configs[].reconfigure.exec`），(b) silent regression（OpsRequest 报 Succeed 但 runtime 未应用，唯一可信 ground truth 是每个 pod 上 `CONFIG GET`），(c) fan-out 默认 primary-only，addon 需显式 `targetPodSelector: All` 才覆盖所有 pod。提供三种 portability 套路（双写共存 / 单写选边 / template variant）+ 6 类 trap 清单（legacy reloadAction ignore / cmpd.exec ignore / fan-out 漏 All / CONFIG SET silent +OK / hash marker 漂移 / init-script 残留）+ 跨版本测试矩阵。和 `addon-chart-vs-kb-schema-skew-diagnosis-guide.md` 形成 cross-version 主题对子（前者 setup-time blocker，本篇 runtime-time silent failure）
 - [`docs/addon-switchover-guide.md`](addon-switchover-guide.md)
 - [`docs/addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md) — 测试成功语义、bounded eventual convergence、first blocker 分层、validation-only gate 身份固定、现场冻结和测试资产统计口径
 - [`docs/addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md) — 一次探针失败如何分到正确的层（`route_api` / `<client>_<channel>` / `empty_output` / `parse_empty` / `runtime_mismatch` / `real_*_mismatch`），以及写探针的 7 条硬规则
@@ -84,7 +86,7 @@
 - [`docs/addon-control-plane-election-guide.md`](addon-control-plane-election-guide.md)
 - [`docs/addon-ops-restart-troubleshooting-guide.md`](addon-ops-restart-troubleshooting-guide.md) — Ops / Restart 排障时，先分 `queue 入口未放行` vs `执行体内部`，并用“冻结失败样本 + clean restart”的两段式验证来闭合 restart 修复
 - [`docs/addon-componentdefinition-upgrade-guide.md`](addon-componentdefinition-upgrade-guide.md) — `ComponentDefinition` 升级时如何识别 immutable spec blocker，以及何时走新名字 / 新版本而不是同名覆盖
-- [`docs/addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](addon-chart-vs-kb-schema-skew-diagnosis-guide.md) — chart `helm install` 报 `field not declared in schema` 时的判定 framework：先扫同仓 release 分支、再追字段绝对路径、再 cross-chart dry-run；区分「chart 局部 bug」/「整代代差」/「chart 跟 KB main 但 API 未发布」三种根因（reconfigure 接口的具体跨版本演进与写法迁移见 `addon-reconfigure-version-skew-guide.md`，TBD）
+- [`docs/addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](addon-chart-vs-kb-schema-skew-diagnosis-guide.md) — chart `helm install` 报 `field not declared in schema` 时的判定 framework：先扫同仓 release 分支、再追字段绝对路径、再 cross-chart dry-run；区分「chart 局部 bug」/「整代代差」/「chart 跟 KB main 但 API 未发布」三种根因。reconfigure 接口的具体跨版本演进与写法迁移见 [`addon-reconfigure-version-skew-guide.md`](addon-reconfigure-version-skew-guide.md)
 - [`docs/addon-bootstrap-role-publish-guide.md`](addon-bootstrap-role-publish-guide.md) — bootstrap 初期如何先收 role truth，再收 role label / service / endpoint 的 publish 链
 - [`docs/addon-narrow-scope-force-delete-guide.md`](addon-narrow-scope-force-delete-guide.md) — 「pod 在 image pull 阶段被删」引发的 cluster ← component ← instanceset ← pod ← CmpD 多级 finalizer 死锁；正确的窄域 recovery 是 force-delete 那一个 stuck pod，不要 patch finalizer
 - [`docs/addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) — 对自己产出的结论也做 bounded retry：N=1→"average" / 间接旁证→"系统性证伪" / 动机假设→narrative inflation 三类反模式 + 自检清单 + 8 条硬规则 + harness 修复时机 dirty→clean 三段式 timeline（pre-sample / pre-promote reject-and-rerun / post-promote invalidate-and-re-promote）
