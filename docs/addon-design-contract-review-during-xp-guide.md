@@ -1,5 +1,11 @@
 # Addon Design-Contract Review During XP 指南
 
+> **Audience**: addon dev / test 工程师（XP 模式下两个角色同一人）+ pair-programming reviewer
+> **Status**: stable
+> **Applies to**: any KB addon（设计契约级 review 方法论，不绑定单引擎或单 ops 类型）
+> **Applies to KB version**: any（review 模式与 KB 版本解耦；引擎特化 8 类 blocker 实证在文末附录）
+> **Affected by version skew**: 不受 KB 版本影响 — review checklist 跨 KB 版本通用
+
 本文面向 Addon 开发与测试工程师（XP 模式下他们是同一个人），聚焦一个常被默认但很少显式验证的属性：**review 阶段必须做"设计契约级 challenge"，不只是 syntax / lint / 测试通过的检查；这种 review 抓到的问题会比 e2e 早一个数量级**。
 
 正文写通用方法论，引擎相关的实证（具体 8 类 blocker 的代码现场）在文末附录。

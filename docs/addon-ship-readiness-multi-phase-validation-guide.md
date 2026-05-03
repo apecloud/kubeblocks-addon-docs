@@ -1,5 +1,11 @@
 # Addon Ship-Readiness 多阶段验证矩阵指南
 
+> **Audience**: addon TL / test 工程师，需要决定 addon 何时可以发布
+> **Status**: stable
+> **Applies to**: any KB addon（ship-readiness gate 是引擎无关的发布决策方法论）
+> **Applies to KB version**: any（验证矩阵框架不依赖具体 KB 版本；引擎特化 N 计数 / flake 阈值由 owner 在案例附录补）
+> **Affected by version skew**: 不受 KB 版本影响 — 三段矩阵 + Wilson CI + 二段 ship 判定与 KB 版本演化解耦
+
 本文面向 Addon 技术负责人 / 测试工程师，回答一个不太好定义的问题：**一个 addon 在什么时候能被标记为可以发布？** 不是"测试都跑过一次"，也不是"chaos 跑了一晚上"，而是有一个分阶段、可累积证据、可量化 flake 复现率的验证矩阵。
 
 正文是引擎无关的方法论，引擎相关结果放在案例附录。

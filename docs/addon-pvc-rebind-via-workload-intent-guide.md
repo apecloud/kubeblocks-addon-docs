@@ -1,5 +1,11 @@
 # Addon PVC Rebind via Workload Intent 指南
 
+> **Audience**: addon dev / test / TL，需要设计或排查 OpsRequest 跨控制器 PVC 改绑（rebuild / restore-into-place / PV migration）路径
+> **Status**: stable
+> **Applies to**: any KB addon（跨 OpsRequest 控制器 + Workload 控制器 + 动态 provisioner 的所有权交接是 KubeBlocks 通用模式）
+> **Applies to KB version**: KB 1.0.x / 1.1.x / main（Workload Intent annotation 模式与具体 KB 版本解耦；引擎特化样本在 commit `a2ffaed` 后续 case 附录）
+> **Affected by version skew**: 不受 KB 版本影响 — Workload CR annotation contract 跨版本一致
+
 本文面向 Addon 开发与测试工程师，聚焦一个在 OpsRequest 控制器和 Workload 控制器同时存在的体系里几乎一定会遇到的问题：**当某个 OpsRequest 想把同一个 PVC 名字下的存储从一块旧 PV 改绑到一块预先准备好的新 PV，而 Workload 控制器又会按模板自动重建丢失的 PVC，两边会抢同一个 PVC 名字的所有权。**
 
 正文写通用方法论，不绑定某一个引擎、不绑定某一类 Ops；引擎相关的现场、命令、案例放在附录。
