@@ -35,6 +35,8 @@
 - [`addon-bounded-eventual-convergence-guide.md`](addon-bounded-eventual-convergence-guide.md) — 异步收敛系统的状态判定必须 bounded retry，禁止单次 snapshot 当结论 *(also relevant in: 设计 / 开发新 addon — addon 启动 / rejoin / reconfigure 后的判定面)*
 - [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) — 对自己产出的结论也做 bounded retry：N=1→"average" / 间接旁证→"系统性证伪" / 动机假设→narrative inflation 三类反模式
 - [`addon-design-contract-review-during-xp-guide.md`](addon-design-contract-review-during-xp-guide.md) — XP 模式 review 阶段的 "design-contract challenge" checklist：8 类常见设计契约级缺陷（静默 fallback / 非空字段未强制 / 同 commit state 不连续 / sentinel 值传错误 / 条件清理状态枚举不穷尽 / NotFound 短路写入 / terminating vs absent 不区分 / 运算符优先级陷阱），每类含 review 模式 + 修法
+- [`addon-test-baseline-standard-guide.md`](addon-test-baseline-standard-guide.md) — 跨 addon 测试 baseline 标准：20 项必需 smoke / 10 项必需 chaos / 引擎特化 conditional / 8 条跨 addon 方法论 baseline + 各 addon self-audit framework（一份 cross-addon 契约层 normative 文档，per-addon TEST_CATALOG.md / COVERAGE.md cross-ref 它）
+- [`addon-test-intensity-templates-guide.md`](addon-test-intensity-templates-guide.md) — 5 个跨引擎测试强度模板：N-multiplier wrapper / 24h soak with random chaos / 大数据规模 baseline / 并发 baseline / 多 chaos 叠加 — 用于在 baseline 覆盖之上提升测试强度，每个模板含 engine-neutral 实现框架 + 引擎适配 checklist
 
 ### 3. 环境 ready 前 / 环境层撞坑
 
