@@ -342,3 +342,72 @@ shellspec / unit test 必须显式覆盖这个场景：
 
 - 看到 switchover Ops `Failed`、Sentinel / 协调器视角已经完成切换、但 addon 自检仍在“某个时间窗口内未确认 new primary”，**先怀疑 stale env list**，而不是直接归到 sentinel / runtime 缺陷；
 - 收证据时固定：old primary action 容器里 `env | grep POD_FQDN_LIST` 的实际值、scale-out 后 cluster `replicas` / pod count、controller 调用 action 时实际下发的 candidate FQDN、以及脚本遍历点的入参快照。
+
+## 案例附录：Valkey scale-out 后 targeted switchover stale POD_FQDN_LIST
+
+> **Cross-engine usage**：Valkey addon 实际踩过原则 7 描述的 stale env 路径，并按方法论 `pod_fqdns_with_candidate()` 修法 land 修复 + shellspec 覆盖。本附录给 Valkey 现场的 evidence + 命令样板；完整时间线、修复 diff、shellspec 覆盖范围见 [`cases/valkey/scale-out-targeted-switchover-stale-pod-list-case.md`](cases/valkey/scale-out-targeted-switchover-stale-pod-list-case.md)。
+
+### 现场设置
+
+- Valkey cluster `replicas=3`（`valkey-0/1/2`）启动稳定后 scale-out 到 `replicas=4`，`valkey-3` 进入 Running 且 sentinel 三路均 `known-slave` 收齐。
+- 立即发起 targeted switchover 指定 `KB_SWITCHOVER_CANDIDATE_FQDN=valkey-3.<headless>...`。
+- post 状态：sentinel 视图 + 实际拓扑显示 `valkey-3` 已成 master，replica-priority 已恢复，**无 split-brain**。
+- OpsRequest 仍 `Failed`，原因：addon 自检 `wait_for_new_master` 在 `300s` 窗口内**只在 valkey-0/1/2 上轮询**，看到 `role:slave` 三连，最终超时报失败。
+
+### 直接根因
+
+`addons/valkey/scripts/switchover.sh` 中四个遍历点（`set_priorities_with_candidate_bias` / `restore_priorities` / `wait_for_new_master` / `check_replication_status`）都直接读容器启动时 KB 控制面通过 `componentVarRef.podFQDNs` 注入的静态 `VALKEY_POD_FQDN_LIST`：
+
+```bash
+# old primary (valkey-0) 容器内
+$ env | grep VALKEY_POD_FQDN_LIST
+VALKEY_POD_FQDN_LIST=valkey-0.<headless>,valkey-1.<headless>,valkey-2.<headless>
+```
+
+scale-out 之后 old primary 的 env 不会自动刷新；`wait_for_new_master` 在 valkey-0/1/2 三个旧成员上各看了 300s `role:slave`，根本没去 `valkey-3` 上 probe。
+
+### 修复实现：`pod_fqdns_with_candidate()`
+
+引入辅助函数把 action 入参中的 `KB_SWITCHOVER_CANDIDATE_FQDN` union 进容器 env list：
+
+```bash
+pod_fqdns_with_candidate() {
+  local candidate_fqdn="${1}"
+  local result="${VALKEY_POD_FQDN_LIST:-}"
+  if is_empty "${candidate_fqdn}"; then
+    echo "${result}"
+    return 0
+  fi
+  local candidate_pod="${candidate_fqdn%%.*}"
+  if echo "${result}" | grep -q "^${candidate_pod}\.\|,${candidate_pod}\."; then
+    echo "${result}"   # 已经在 list 内，幂等
+    return 0
+  fi
+  if [ -z "${result}" ]; then echo "${candidate_fqdn}"; else echo "${result},${candidate_fqdn}"; fi
+}
+```
+
+四个遍历点统一改成：
+
+```bash
+local fqdns
+fqdns=$(pod_fqdns_with_candidate "${expected_fqdn}")
+for fqdn in $(echo "${fqdns}" | tr ',' ' '); do
+  # ... 原有 priority bias / role probe / wait_for_new_master 逻辑 ...
+done
+```
+
+### 验证 evidence
+
+- 本机现场：scale-out 后 OpsRequest 旧版本必现 `wait_for_new_master ... 300s timeout`，修复后 ~10s 内 `valkey-3` 在遍历列表中并被探到 `role:master`。
+- shellspec 显式覆盖："入参 `expected_fqdn` 在 `VALKEY_POD_FQDN_LIST` 中缺失"分支：
+
+```bash
+shellspec --shell bash spec/valkey_switchover_spec.sh -e 'pod_fqdns_with_candidate'
+# 期望：所有 6 个 example 通过（candidate-already-present / candidate-missing /
+# empty-list / empty-candidate / single-candidate / multi-replica-rotation）
+```
+
+### 跨引擎适用面
+
+任何 addon 的 switchover/failover/replicate-priority/re-register 类脚本，只要遍历的是控制面注入的 pod 成员 list（`<ENGINE>_POD_FQDN_LIST` / `_POD_NAME_LIST` / `SENTINEL_POD_FQDN_LIST` / `CURRENT_SHARD_POD_FQDN_LIST`），都适用同一修法：union action 入参 candidate FQDN 进 env list，并在 shellspec 显式覆盖"candidate 不在 env"分支。Valkey 这个修法可作为其它 addon team 的实现参考。
