@@ -32,6 +32,7 @@
 - [`addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md) — 探针失败分到 `route_api` / `<client>_<channel>` / `empty_output` / `parse_empty` / `runtime_mismatch` / `real_*_mismatch` 等正确层
 - [`addon-bounded-eventual-convergence-guide.md`](addon-bounded-eventual-convergence-guide.md) — 异步收敛系统的状态判定必须 bounded retry，禁止单次 snapshot 当结论 *(also relevant in: 设计 / 开发新 addon — addon 启动 / rejoin / reconfigure 后的判定面)*
 - [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) — 对自己产出的结论也做 bounded retry：N=1→"average" / 间接旁证→"系统性证伪" / 动机假设→narrative inflation 三类反模式
+- [`addon-design-contract-review-during-xp-guide.md`](addon-design-contract-review-during-xp-guide.md) — XP 模式 review 阶段的 "design-contract challenge" checklist：8 类常见设计契约级缺陷（静默 fallback / 非空字段未强制 / 同 commit state 不连续 / sentinel 值传错误 / 条件清理状态枚举不穷尽 / NotFound 短路写入 / terminating vs absent 不区分 / 运算符优先级陷阱），每类含 review 模式 + 修法
 
 ### 3. 环境 ready 前 / 环境层撞坑
 
@@ -93,6 +94,7 @@
 - [`docs/addon-test-runner-cadence-discipline-guide.md`](addon-test-runner-cadence-discipline-guide.md) — 长时 test runner 运行期间，cadence 是操作者（而非 runner）的义务：5min 默认是硬约束；沉默 > 间隔 = 状态未知；no-progress ping 有效；cadence 触发器必须与 runner 进程解耦；含 7 条硬规则 + 反模式表 + 自检清单 + Run 5 反面 / Run 6 正面双案例
 - [`docs/addon-test-dg-helper-completeness-guide.md`](addon-test-dg-helper-completeness-guide.md) — 多步骤异步操作的 test helper 必须使用 multi-gate：单一状态字符串是 fakeable 的，必须补充 unfakeable observable invariant（成员计数 / 角色标签 / 指标阈值）；gate 串行 AND 不能短路 OR；fix 需 dry-run（无 false-negative）+ fresh install（真正 blocks race window）双验证；含 7 条硬规则 + 反模式表 + 自检清单 + Oracle DG Bug #26 案例
 - [`docs/addon-controller-crash-resilience-guide.md`](addon-controller-crash-resilience-guide.md) — 控制器在 Ops 中段被 SIGKILL / OOM 后，OpsRequest 是否能继续推进至正确终态：控制层故障 vs 数据层故障的边界、desired state 在 CR 上的 4 个隐含语义、crash 中段触发 + 4 项终态验证（Ops Succeed / 副作用计数 / 步骤完整 / 状态机连贯）+ 4 个常见误判
+- [`docs/addon-design-contract-review-during-xp-guide.md`](addon-design-contract-review-during-xp-guide.md) — XP 模式 review 阶段的 design-contract challenge checklist。8 类常见设计契约级缺陷（静默 fallback / 非空字段未强制 / 同 commit state 不连续 / sentinel 值传错误 / 条件清理状态枚举不穷尽 / NotFound 短路写入 / terminating vs absent 不区分 / 运算符优先级陷阱）每类含 review 模式 + 修法 + 反面（传统 Dev/Test split 漏掉的概率）；适合 onboarding + pre-commit + review checklist 三种用法
 - [`docs/addon-ship-readiness-multi-phase-validation-guide.md`](addon-ship-readiness-multi-phase-validation-guide.md) — addon 何时算可以 ship 的三段矩阵（baseline / chaos × N / regression × N），累积 N、Wilson 95% CI、ship 阈值表（数据丢失 0% / 服务不可用 5% / transient 30%）、二段判定（产品 fail = 0 + caveat 全 document）+ 5 个常见误判
 
 ## 案例材料
