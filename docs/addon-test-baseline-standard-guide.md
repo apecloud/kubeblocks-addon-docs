@@ -236,3 +236,25 @@ This is initial read of current state as of 2026-05-03 — it serves as a starti
 ## Case appendix (cross-engine evidence)
 
 Each addon's self-audit lives at `docs/cases/<engine>/<engine>-test-baseline-audit.md` and provides the engine-specific evidence for compliance with this standard. Cross-engine comparison snapshots may live at `docs/cases/methodology/cross-addon-test-baseline-status-<date>.md`.
+
+### Case appendix: cross-engine expansion strength real-race findings (2026-05-03)
+
+This appendix surfaces, in this guide's body, the engineering proof that Section 4.3 (Expansion Strength Mandate) is doctrine backed by hard cross-engine evidence rather than abstract policy. Full timeline, per-axis decomposition, fix commits, and acceptance evidence packs are kept in `cases/methodology/extension-strength-finds-real-race-2026-05-03-case.md`; this appendix is the entry-point summary that lets readers see the cross-engine usage record without leaving the parent guide.
+
+Three addon test lines, all of which had previously declared their then-current chaos suite "small-sample clean" under Section 4.3 baseline, were required to extend along orthogonal axes per Rule 2. Each line surfaced contract-level race conditions that the original baseline could not have observed.
+
+| Engine line | Original baseline | Axes added (per Rule 2 mandate) | Race surfaced | Closure |
+|---|---|---|---|---|
+| Valkey RebuildInstance | 49-sample acceptance fully clean | density (N=5/10/20) × concurrency × pod-restart-window | 4 contract-level gaps: concurrent rebuild silent retry, failed-OpsRequest intent annotation residue, `getRestoredPV` fatal-on-bind-window, label-discovery silent failure under tmp PVC cleanup | apecloud/kubeblocks PR #10191 follow-up commits `10dfc40af` / `2e129834a` / `514214ac9` / `b99890fbc`, each with sentinel / typed-error contract + unit test pin contract; e2e final 240/0/0 across N=5+10+20 dense |
+| OceanBase chaos C09 | small-N PASS, switchover within SLA | density (dense replay) × client-side acked-write injection | ~700 ms dual-primary acked-write divergence window (old primary fenced but acknowledged client-side write; new primary takeover surfaces divergence on follower) | engine-side fix landed; verified under dense replay with acked-write injection retained as the new strength baseline |
+| SQL Server chaos CH50 | small-N PASS, application-layer consistent | density × commit-window precise failure injection | commit-unknown ambiguity: client receives neither explicit ACK nor explicit fail in the commit window while server-side transaction is committed (idempotency hazard for retry-on-failure clients) | server / driver contract corrected; CH10–CH50 N=10 strength evidence pack `kubeblocks-tests/sqlserver/artifacts/20260503-2348-n10-chaos-ch10-ch20-ch30-kb103b5.tar.gz` (sha256 `2a9de85a08b8d86fcdb57197305d70b77c8a130959962e53861ea605d35da4d8`) verifies post-fix stability |
+
+Three observations carry across all three lines:
+
+1. Original small-sample acceptance was clean. Under traditional ship-readiness criteria the test sets would have been declared sufficient.
+2. The expansion that surfaced each gap was always along a new orthogonal axis (concurrency / density / chaos overlay / failure window / acked-write injection), not repetition of the existing case at higher N.
+3. Every gap was contract level. None was a transient performance jitter or environmental flake. Each closure required a contract change (sentinel, typed error, source-of-truth correction, protocol strengthening), and re-acceptance under dense replay was mandatory before close.
+
+These three findings are the canonical evidence pack referenced from Section 4.3. New addon lines onboarding to this baseline are expected to consult them when judging whether their existing strength evidence is sufficient for ship-readiness.
+
+Cross-engine usage annotations (when an addon team uses this guide to drive their own audit or expansion and reports findings or no-finding verdicts) should be appended to this appendix going forward, per the corpus-wide cross-engine usage annotation convention.
