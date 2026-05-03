@@ -1,5 +1,11 @@
 # Addon Controller Crash Resilience 指南
 
+> **Audience**: addon dev / test / TL，需要验证 addon 在 KubeBlocks 控制器中段失效后的恢复语义
+> **Status**: stable
+> **Applies to**: any KB addon（控制层 crash 是 K8s 通用属性，不绑定单引擎）
+> **Applies to KB version**: any（控制器 crash-recover 语义在 KB 各版本下行为一致；本文方法论 version-agnostic）
+> **Affected by version skew**: 不受 KB 版本影响 — 控制器 crash 后从 CR desired state 恢复是 K8s controller 通用契约
+
 本文面向 Addon 开发与测试工程师，聚焦一个被频繁默认而很少被显式验证的属性：**当 KubeBlocks 控制器在一个 Ops 进行到一半时被 crash / SIGKILL，重新拉起后，相关 OpsRequest 与 Cluster 是否能继续推进到正确终态。**
 
 正文只写通用方法论，不绑定某一个引擎或某一类 Ops。引擎相关的现场和案例放在附录。
