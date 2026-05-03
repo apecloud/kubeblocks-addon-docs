@@ -173,18 +173,24 @@ This gate combines two layers:
 
 **Strength tier resource baseline (L0–L3)**:
 
-The minimum host CPU / memory / disk reserve required scales with the strength tier of the run. Per-line empirical baselines are collected and codified into `addon-k3d-host-precheck-guide.md`. Until that table is populated for a given engine line, run owners must declare which tier they intend to run and surface the host snapshot at that moment in the evidence pack.
+The minimum host CPU / memory / disk reserve required scales with the strength tier of the run. The per-line × L0–L3 resource baseline two-dimensional table is codified in `addon-k3d-host-precheck-guide.md` (resource-capacity gating section); each engine line contributes its measured / conservative / unmeasured cells. This guide does not duplicate the data; it holds the framework. Run owners must consult the host-precheck guide at run time and surface the host snapshot at the chosen tier in the evidence pack.
 
-| Tier | Description | Reserve target (placeholder pending per-line empirical data) |
+| Tier | Description | Reference |
 |---|---|---|
-| L0 smoke | Single replica, default topology | (per-line baseline) |
-| L1 standard HA | Default HA topology at line's declared default replica count | (per-line baseline) |
-| L2 chaos | Chaos injection, single chaos overlay | (per-line baseline) |
-| L3 strength | N=10 multiplier / 24h soak / large data scale / multi-chaos overlay | (per-line baseline) |
+| L0 smoke | Single replica, default topology | See `addon-k3d-host-precheck-guide.md` per-line × L0–L3 table |
+| L1 standard HA | Default HA topology at line's declared default replica count | See same |
+| L2 chaos | Chaos injection, single chaos overlay; many lines require an exclusive host window at L2+ | See same |
+| L3 strength | N=10 multiplier / 24h soak / large data scale / multi-chaos overlay | See same; many cells unmeasured on local Mac due to hardware cap |
 
-Each addon line is responsible for contributing its observed L0 / L1 / L2 / L3 reserves (or marking a tier "未实测 / not yet measured"). Cross-line coordinator collects, host-precheck guide owner codifies the threshold table.
+**Cross-line evidence-discipline distinctions for resource baselines** (mandatory framing when reading or contributing to the per-line table):
 
-**Why Rule 0**: this gate runs before any test code, evidence collection, or chaos injection. Failures attributable to insufficient host resources or cross-team contamination must not be allowed to be misread as engine / addon defects, and must not be allowed to consume cycle budget that other teams sharing the host need. Rule 0 is non-negotiable; declared skips must record the specific check skipped and the reason in the evidence pack.
+1. **Request floor vs empirical host baseline**. Pod Kubernetes `requests` are a scheduling floor that operators can set; empirical host CPU / memory / disk reserves are what the host actually needs in order for the run to succeed. The two are not interchangeable. A run cannot infer empirical host baseline from pod request settings, and a host gate cannot be relaxed by lowering pod requests.
+2. **Verified minimum vs conservative gate vs remote target**. Three reserve states must be marked separately. *Verified minimum* means at least one accepted run has succeeded with the cell's reserve. *Conservative gate* means a value chosen safely from existing evidence but not specifically minimised. *Remote target* means a value proposed for an unmeasured tier (typically L3 strength) that has not been validated; remote targets must never be used as hard pass / fail gates for engine / addon defect attribution.
+3. **Measured vs expected vs conditional**. A measured cell came from a real run on a specific topology and host; an expected cell extrapolates to a related topology (e.g. dist-production from repl-dev/test) without a real run; a conditional cell is gated on infrastructure not currently available (e.g. host capacity blocked, snapshot CRD missing). Expected and conditional cells must not be used to claim addon readiness.
+4. **Mac M-series 24 GiB hardware cap is a cross-line constraint at L3 strength**. Multiple engine lines independently reported that L3 strength runs (24h soak, large data scale, dense N over multi-chaos overlay, dist-production HA at higher replica counts) cannot be verified on a local Mac M-series host. L3 strength acceptance requires a remote or large-host gate, not a local Mac. This is not a per-line problem.
+5. **Profile-guard discipline for topology axis expansion**. When an engine line introduces a non-default topology profile (e.g. 2-replica AG instead of 3-replica baseline; replication topology in addition to dist; sharded mode in addition to replication), that profile must be opt-in through an explicit environment flag, the artifact pack name and content must label the profile, the PR body and coverage matrix must label the profile, and the new profile evidence must not silently replace the default-baseline evidence. This prevents non-default-topology evidence from being misread as a regression of the default-topology baseline.
+
+**Why Rule 0**: this gate runs before any test code, evidence collection, or chaos injection. Failures attributable to insufficient host resources or cross-team contamination must not be allowed to be misread as engine / addon defects, and must not be allowed to consume cycle budget that other teams sharing the host need. Rule 0 is non-negotiable; declared skips must record the specific check skipped and the reason in the evidence pack. The five evidence-discipline distinctions above govern how all reserve cells in the host-precheck table are read and contributed to; violating any of them re-introduces the false-negative or attribution drift modes that Rule 0 is designed to prevent.
 
 ### 4.6 Pattern B fork-zombie audit (probe / lifecycle scripts)
 
