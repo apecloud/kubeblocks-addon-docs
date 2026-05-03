@@ -173,11 +173,11 @@ This gate combines two layers:
 
 **Strength tier resource baseline (L0–L3)**:
 
-The minimum host CPU / memory / disk reserve required scales with the strength tier of the run. The per-line × L0–L3 resource baseline two-dimensional table is codified in `addon-k3d-host-precheck-guide.md` (resource-capacity gating section); each engine line contributes its measured / conservative / unmeasured cells. This guide does not duplicate the data; it holds the framework. Run owners must consult the host-precheck guide at run time and surface the host snapshot at the chosen tier in the evidence pack.
+The minimum host CPU / memory / disk reserve required scales with the strength tier of the run. The per-line × L0–L3 resource baseline two-dimensional table is codified in [`addon-k3d-host-precheck-guide.md` resource-capacity gating section](addon-k3d-host-precheck-guide.md#resource-capacity-gating); each engine line contributes its measured / conservative / unmeasured cells. This guide does not duplicate the data; it holds the framework. Run owners must consult the host-precheck guide at run time and surface the host snapshot at the chosen tier in the evidence pack. Cross-team reserve discipline is documented at [`addon-k3d-host-precheck-guide.md` cross-team reserve discipline section](addon-k3d-host-precheck-guide.md#cross-team-reserve-discipline).
 
 | Tier | Description | Reference |
 |---|---|---|
-| L0 smoke | Single replica, default topology | See `addon-k3d-host-precheck-guide.md` per-line × L0–L3 table |
+| L0 smoke | Single replica, default topology | See [resource-capacity gating](addon-k3d-host-precheck-guide.md#resource-capacity-gating) per-line × L0–L3 table |
 | L1 standard HA | Default HA topology at line's declared default replica count | See same |
 | L2 chaos | Chaos injection, single chaos overlay; many lines require an exclusive host window at L2+ | See same |
 | L3 strength | N=10 multiplier / 24h soak / large data scale / multi-chaos overlay | See same; many cells unmeasured on local Mac due to hardware cap |

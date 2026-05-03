@@ -271,6 +271,8 @@ oracle-test            OK     78ms      27.6%    1566       no
 
 三集群合计约 8.3 GiB，host 剩余 ~3.4 GiB（无大规模 addon 测试时）。最小内存机器（11.67 GiB），3 副本 AG 测试（6-8 GiB）需协调释放资源。
 
+<a name="resource-capacity-gating"></a>
+
 ## 资源容量门控（per-line × L0-L3 硬阈值）
 
 precheck 不只看"水位百分比"。每条 addon line 在不同测试强度下对 host 的资源 footprint 不一样，单一 floor 不可行（实测 cross-line variance 5 倍）。**开测前必须按 line × level 二维表查 host 资源是否够，不够直接 ITSP，不算 addon fail**。
@@ -314,6 +316,8 @@ precheck 不只看"水位百分比"。每条 addon line 在不同测试强度下
 precheck pass + addon test 真的失败 → **算 addon fail**，进失败归类正常流程。
 
 这条边界很关键：**资源不够 = 测试没启动；测试没启动 ≠ addon 故障**。混淆两者会污染 addon 失败统计，让真 addon bug 被 noise 淹没。
+
+<a name="cross-team-reserve-discipline"></a>
 
 ## 跨 team reserve discipline
 
