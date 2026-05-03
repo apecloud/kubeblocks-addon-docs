@@ -8,10 +8,11 @@ This repo is **addon development and testing methodology + engine cases** for Ku
 
 ## Repo layout
 
-- `docs/addon-*-guide.md` — methodology docs (engine-agnostic, 18 files)
-- `docs/cases/<engine>/` — engine-specific cases (mariadb / valkey / oracle / methodology)
+- `docs/addon-*-guide.md` — methodology docs (engine-agnostic, 29 files as of 2026-05-04)
+- `docs/cases/<engine>/` — engine-specific cases (mariadb / valkey / oracle / oceanbase / sqlserver / methodology)
 - `docs/SKILL-INDEX.md` — primary entry; scenario-based navigation
 - `README.md` — short repo orientation for humans
+- `CONTRIBUTING.md` — contributor conventions and process
 
 ## Routing for LLM consumers
 
@@ -19,11 +20,16 @@ When the user asks a question, match against this table and load the relevant do
 
 | User scenario | Primary docs to load |
 |---|---|
-| Designing / writing new addon (ComponentDefinition, lifecycle action, bootstrap, role publish) | `addon-bootstrap-role-publish-guide.md`, `addon-control-plane-election-guide.md`, `addon-reconfigure-guide.md`, `addon-switchover-guide.md`, `addon-tls-guide.md`, `addon-componentdefinition-upgrade-guide.md` |
-| Writing smoke / chaos / regression test (probes, bounded retry, first blocker) | `addon-test-acceptance-and-first-blocker-guide.md`, `addon-test-probe-classification-guide.md`, `addon-bounded-eventual-convergence-guide.md`, `addon-evidence-discipline-guide.md` |
-| Local k3d / test env not ready (kubeconfig EOF, image pull, CSI crash, BackupRepo missing) | `addon-test-environment-gate-hygiene-guide.md`, `addon-k3d-kubeconfig-loopback-fix-guide.md`, `addon-k3d-image-import-multiarch-workaround-guide.md`, `addon-k3d-backup-restore-prereqs-guide.md` |
+| Designing / writing new addon (ComponentDefinition, lifecycle action, bootstrap, role publish) | `addon-bootstrap-role-publish-guide.md`, `addon-control-plane-election-guide.md`, `addon-reconfigure-guide.md`, `addon-switchover-guide.md`, `addon-tls-guide.md`, `addon-componentdefinition-upgrade-guide.md`, `addon-pvc-rebind-via-workload-intent-guide.md` |
+| Writing probes (livenessProbe / readinessProbe / lifecycle hooks) and avoiding fork-zombie / soft-failure traps | `addon-probe-script-fork-and-zombie-guide.md`, `addon-probe-timeout-and-soft-failure-guide.md` |
+| Writing ParametersDefinition cue/tpl validation (numeric ranges) | `addon-paramdef-cue-range-validation-guide.md` |
+| Writing smoke / chaos / regression test (probes, bounded retry, first blocker, baseline) | `addon-test-baseline-standard-guide.md`, `addon-test-acceptance-and-first-blocker-guide.md`, `addon-test-probe-classification-guide.md`, `addon-bounded-eventual-convergence-guide.md`, `addon-evidence-discipline-guide.md`, `addon-test-dg-helper-completeness-guide.md` |
+| Pushing test intensity beyond baseline (N-multiplier / soak / data-scale / concurrency / multi-chaos) | `addon-test-intensity-templates-guide.md`, `addon-test-runner-cadence-discipline-guide.md` |
+| Designing test runner / cadence / artifact discipline | `addon-test-runner-cadence-discipline-guide.md`, `addon-test-runner-portability-guide.md` |
+| Local k3d / test env not ready (kubeconfig EOF, image pull, CSI crash, BackupRepo missing, host precheck) | `addon-test-environment-gate-hygiene-guide.md`, `addon-k3d-host-precheck-guide.md`, `addon-k3d-kubeconfig-loopback-fix-guide.md`, `addon-k3d-image-import-multiarch-workaround-guide.md`, `addon-k3d-backup-restore-prereqs-guide.md` |
 | Cluster up but Ops/Restart stuck or chart install fails or finalizer deadlock | `addon-ops-restart-troubleshooting-guide.md`, `addon-chart-vs-kb-schema-skew-diagnosis-guide.md`, `addon-narrow-scope-force-delete-guide.md`, `addon-test-host-stress-and-pollution-accumulation-guide.md` |
-| Test runner portability (macOS bash 3.2, set -euo pipefail) | `addon-test-runner-portability-guide.md` |
+| Validating crash resilience / Day-2 ops role-label race / ship readiness | `addon-controller-crash-resilience-guide.md`, `addon-rolling-day2-role-label-race-guide.md`, `addon-ship-readiness-multi-phase-validation-guide.md` |
+| Pair-programming / code review for design-contract level issues | `addon-design-contract-review-during-xp-guide.md` |
 | Reasoning about evidence strength / making a decision call | `addon-evidence-discipline-guide.md`, `addon-bounded-eventual-convergence-guide.md` *(cross-cutting methodology)* |
 
 When the user's question does not fit cleanly: start with `docs/SKILL-INDEX.md` and follow its "按场景找文档" section.
@@ -87,12 +93,13 @@ Then link with `[appendix B](#appendix-b-cell-3-valkey-solo)` from elsewhere. (C
 
 For **pure structural fixes** (intro block retrofit, cross-ref linkification, off-topic cleanup, format harmonization), follow the `style-harmonize/<short-desc>` branch convention with `[style-harmonize]` commit prefix. Single reviewer ack is sufficient for fast-merge.
 
-## Status of pending work (2026-04-29)
+## Status of pending work (2026-05-04)
 
-- 12 of 18 methodology docs awaiting intro block retrofit (pending owner KB version confirmation)
-- 6 of 18 methodology docs missing readability abstract (pending owner content collaboration)
-- `addon-reconfigure-version-skew-guide.md` pending — Alice writing, this-week ETA
-- 2D taxonomy v0 on SKILL-INDEX landed; refinement pending Alice
-- Cold-start checklist pending — Alice writing phase 0 + 5
+- 29 methodology guides in `docs/`; 19/29 carry full 5-field intro block, 10 stragglers from nayutah baseline pending owner-collab retrofit
+- 4 of 29 methodology docs missing readability abstract: `addon-bounded-eventual-convergence-guide`, `addon-evidence-discipline-guide`, `addon-reconfigure-guide`, `addon-test-environment-gate-hygiene-guide` (pending owner content collaboration)
+- 15 case files: 12/15 carry intro block, 14/15 carry parent-doc cross-ref
+- Engine case distribution: mariadb 10, oracle 3, valkey 1, methodology 1, oceanbase 0 (PR #30 draft pending B/E decision), sqlserver 0 (Tom/Jerry kicked off 2026-05-03)
+- `addon-reconfigure-version-skew-guide.md` pending PR #13 (Valkey-track, marked draft in body)
+- Engineering-PR cite signal: `addon-probe-script-fork-and-zombie-guide` is the only guide with confirmed external code-fix PR cites (apecloud-addons #2617 + #2620); other guides mostly cited intra-doc
 
 When in doubt about whether a doc reflects current best practice, check `git log` for recent updates and look for `[style-harmonize]` PR signals.
