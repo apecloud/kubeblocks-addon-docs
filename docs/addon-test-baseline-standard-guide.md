@@ -150,13 +150,41 @@ In all three lines the original small-sample acceptance was clean. The contract 
 
 Each evidence pack must produce `tar.gz` + `sha256` attestation. Loose-file evidence is acceptable as a working stage but not as final artifact for cross-addon comparison.
 
-### 4.5 Pre-flight checks (cross-addon environment hygiene)
+### 4.5 Pre-test resource readiness gating (Rule 0 — runs before all other gates)
 
-Every test run must observe these pre-flight checks (or document that they're skipped with reason):
+Before any test runner starts a suite, it must observe a Rule 0 readiness gate covering both environment hygiene AND resource sufficiency. Failing any gate must abort the run with a clearly classified non-execution exit (not a test failure), so that resource-induced false negatives never enter the result corpus and so that other teams sharing the same host are not impacted.
+
+This gate combines two layers:
+
+**A. Environment hygiene** (apply to every run regardless of strength tier):
 
 - Host-level k3d snapshot (`addon-k3d-host-precheck-guide.md`)
 - Backup/restore prereq (`addon-k3d-backup-restore-prereqs-guide.md`) — including the **Docker Desktop restart non-persistence caveat**: `mount --make-rshared /` on k3d node containers does not survive Docker Desktop restart; backup tests after a restart must re-execute this fix
 - Hostname declaration when discussing or claiming any cluster
+
+**B. Resource sufficiency and cross-team contention checks** (mandatory for every run):
+
+- Host CPU and memory headroom — current free CPU and free MEM on the host must exceed the strength tier's minimum reserve (see L0–L3 table below)
+- Disk reserve — free disk on the workspace volume must exceed the strength tier's minimum (large evidence packs and dense replays consume disk)
+- Kubernetes API server health — `/readyz` probe must return ok; sustained API server p99 latency outside baseline indicates control-plane instability that will produce false negatives
+- Pending pod count — pending pods across all namespaces must be below a threshold (sustained backlog signals scheduler / image / CSI saturation that will starve the test)
+- Stuck-Terminating residue — any pod stuck in Terminating beyond a bounded window indicates cross-team residue or finalizer deadlock; the run must abort and surface the residue rather than masking it
+- Shared-resource health — BackupRepo, CSI plugin, snapshot controller, and any other namespace-shared infrastructure must be Running / healthy
+
+**Strength tier resource baseline (L0–L3)**:
+
+The minimum host CPU / memory / disk reserve required scales with the strength tier of the run. Per-line empirical baselines are collected and codified into `addon-k3d-host-precheck-guide.md`. Until that table is populated for a given engine line, run owners must declare which tier they intend to run and surface the host snapshot at that moment in the evidence pack.
+
+| Tier | Description | Reserve target (placeholder pending per-line empirical data) |
+|---|---|---|
+| L0 smoke | Single replica, default topology | (per-line baseline) |
+| L1 standard HA | Default HA topology at line's declared default replica count | (per-line baseline) |
+| L2 chaos | Chaos injection, single chaos overlay | (per-line baseline) |
+| L3 strength | N=10 multiplier / 24h soak / large data scale / multi-chaos overlay | (per-line baseline) |
+
+Each addon line is responsible for contributing its observed L0 / L1 / L2 / L3 reserves (or marking a tier "未实测 / not yet measured"). Cross-line coordinator collects, host-precheck guide owner codifies the threshold table.
+
+**Why Rule 0**: this gate runs before any test code, evidence collection, or chaos injection. Failures attributable to insufficient host resources or cross-team contamination must not be allowed to be misread as engine / addon defects, and must not be allowed to consume cycle budget that other teams sharing the host need. Rule 0 is non-negotiable; declared skips must record the specific check skipped and the reason in the evidence pack.
 
 ### 4.6 Pattern B fork-zombie audit (probe / lifecycle scripts)
 
