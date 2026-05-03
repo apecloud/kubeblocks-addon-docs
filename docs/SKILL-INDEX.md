@@ -23,6 +23,7 @@
 - [`addon-switchover-guide.md`](addon-switchover-guide.md) — switchover / failover 幂等性，重入下的 candidate 与角色收敛
 - [`addon-tls-guide.md`](addon-tls-guide.md) — TLS 产品语义、明文拒绝正向验证、与 reconfigure / backup / switchover 组合验证
 - [`addon-componentdefinition-upgrade-guide.md`](addon-componentdefinition-upgrade-guide.md) — `ComponentDefinition` 升级时识别 immutable spec blocker、何时走新名字 vs 同名覆盖
+- [`addon-pvc-rebind-via-workload-intent-guide.md`](addon-pvc-rebind-via-workload-intent-guide.md) — 当一条 OpsRequest 需要把同名 PVC 从一块 PV 改绑到另一块（rebuild / restore-into-place / PV migration），用 Workload CR annotation 把意图交给 Workload 控制器（唯一写者），避免 OpsRequest 控制器、Workload 控制器、动态 provisioner 三方抢同名 PVC 所有权造成 `PersistentVolume "" not found` 或绑错 PV
 
 ### 2. 写新 smoke / chaos 测试
 
@@ -95,6 +96,7 @@
 - [`docs/addon-test-dg-helper-completeness-guide.md`](addon-test-dg-helper-completeness-guide.md) — 多步骤异步操作的 test helper 必须使用 multi-gate：单一状态字符串是 fakeable 的，必须补充 unfakeable observable invariant（成员计数 / 角色标签 / 指标阈值）；gate 串行 AND 不能短路 OR；fix 需 dry-run（无 false-negative）+ fresh install（真正 blocks race window）双验证；含 7 条硬规则 + 反模式表 + 自检清单 + Oracle DG Bug #26 案例
 - [`docs/addon-controller-crash-resilience-guide.md`](addon-controller-crash-resilience-guide.md) — 控制器在 Ops 中段被 SIGKILL / OOM 后，OpsRequest 是否能继续推进至正确终态：控制层故障 vs 数据层故障的边界、desired state 在 CR 上的 4 个隐含语义、crash 中段触发 + 4 项终态验证（Ops Succeed / 副作用计数 / 步骤完整 / 状态机连贯）+ 4 个常见误判
 - [`docs/addon-design-contract-review-during-xp-guide.md`](addon-design-contract-review-during-xp-guide.md) — XP 模式 review 阶段的 design-contract challenge checklist。8 类常见设计契约级缺陷（静默 fallback / 非空字段未强制 / 同 commit state 不连续 / sentinel 值传错误 / 条件清理状态枚举不穷尽 / NotFound 短路写入 / terminating vs absent 不区分 / 运算符优先级陷阱）每类含 review 模式 + 修法 + 反面（传统 Dev/Test split 漏掉的概率）；适合 onboarding + pre-commit + review checklist 三种用法
+- [`docs/addon-pvc-rebind-via-workload-intent-guide.md`](addon-pvc-rebind-via-workload-intent-guide.md) — 跨控制器 PVC 所有权交接：OpsRequest 通过 Workload CR annotation 写一段 Workload Intent，Workload 控制器作为 PVC `spec.volumeName` 的唯一写者读 intent 并按其创建 PVC + 释放错绑。5 个不变量（唯一写者 / opsUID 身份 / 可重入 / 4-priority reclaim 推断 / 清理顺序原子）+ 3 个 reconciler 钩子（PVC 创建 / 释放 / pod 创建 gate）+ fail-closed 全表 + 三类验收样本（独立 N=10 / 同 cluster 密集 / controller restart 窗口）
 - [`docs/addon-ship-readiness-multi-phase-validation-guide.md`](addon-ship-readiness-multi-phase-validation-guide.md) — addon 何时算可以 ship 的三段矩阵（baseline / chaos × N / regression × N），累积 N、Wilson 95% CI、ship 阈值表（数据丢失 0% / 服务不可用 5% / transient 30%）、二段判定（产品 fail = 0 + caveat 全 document）+ 5 个常见误判
 
 ## 案例材料
