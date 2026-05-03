@@ -3,6 +3,8 @@
 > **Audience**: addon test engineer / TL、host 运维、值班工程师
 > **Status**: draft（cell-4 evidence pending；chapter 7 N=2 对账 pending）
 > **Applies to**: 任何在共享单 host k3d 环境跑 addon 全量回归的场景；具体引擎实现细节放案例附录
+> **Applies to KB version**: any（host stress / cascade reactive overload 是 K8s 平面通用现象）
+> **Affected by version skew**: 不受 KB 版本影响 — cleanup gate / cell-2 cascade / pollution accumulation 跨 KB 版本一致
 
 ## 先用白话理解这篇文档
 

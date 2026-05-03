@@ -1,5 +1,11 @@
 # Addon TLS 开发与验证指南
 
+> **Audience**: addon dev / TL，需要实现或排查 TLS 能力（cert rotation / mTLS / cert-manager 集成）
+> **Status**: stable
+> **Applies to**: 任何 KB addon 的 TLS 实现（含 cert-manager 集成 / 双层 Secret 模型 / cert rotation 路径）
+> **Applies to KB version**: any（TLS 设计原则与 KB 版本解耦；cert-manager / Secret API 是 K8s 通用契约）
+> **Affected by version skew**: 不受 KB 版本影响 — TLS 共性问题（私钥 vs 证书 vs CA / NotAfter 验证 / inter-pod 复制流证书 cache）跨 KB 版本一致
+
 本文面向 KubeBlocks Addon 开发者，聚焦 TLS 能力的设计、验证与排障。通用正文只描述 Addon TLS 的共性问题；引擎、协议、命令行工具和拓扑细节只放在案例附录中。
 
 ## 先用白话理解这篇文档

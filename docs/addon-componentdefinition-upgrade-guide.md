@@ -1,5 +1,11 @@
 # Addon ComponentDefinition 升级与 Immutable Spec 指南
 
+> **Audience**: addon dev / test 工程师，遇到 cluster 卡 Creating / component Unavailable / 升级 OpsRequest 卡住时
+> **Status**: stable
+> **Applies to**: 任何 KB addon（ComponentDefinition immutable spec 是 KB API 通用契约）
+> **Applies to KB version**: KB 1.0.x / 1.1.x / main（CmpD 不可变字段在 1.x 演进中保持，跨版本契约稳定）
+> **Affected by version skew**: KB 升级时 CmpD spec 字段集会随版本扩展（见 [`addon-chart-vs-kb-schema-skew-diagnosis-guide.md`](addon-chart-vs-kb-schema-skew-diagnosis-guide.md)），但"已 immutable 的字段不能改"这条原则跨版本不变
+
 本文面向 Addon 开发与测试工程师，聚焦一个很容易被误判的问题：Addon 升级失败时，表面看起来像 cluster 卡在 `Creating`、component 不可用，甚至像 runtime 没起来，但 first blocker 其实可能更早地卡在 live `ComponentDefinition` 自身。
 
 正文只写通用方法论，不绑定某一个引擎。

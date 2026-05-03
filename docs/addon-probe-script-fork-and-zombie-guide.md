@@ -1,5 +1,11 @@
 # Addon Probe 脚本 fork 与 zombie 进程指南
 
+> **Audience**: addon dev 写 probe / lifecycle 脚本时；addon test 在 idle / soak 阶段做 zombie 验证时；reviewer 检查 fork pattern 时
+> **Status**: stable
+> **Applies to**: 任何 KB addon（fork-from-probe / pipeline-with-timeout 模式跨引擎适用）
+> **Applies to KB version**: any（PID 1 reap 行为是 K8s 容器模型 / 内核契约，与 KB 版本解耦）
+> **Affected by version skew**: 不受 KB 版本影响 — kbagent SIGKILL probe 行为 + Go binary PID 1 不 reap 跨 KB 版本一致
+
 本文面向 Addon 开发与测试工程师，聚焦一类会被 5290 case 测试 0 product fail 都掩盖、但放到生产长寿 pod 上几小时就把集群打挂的问题：**addon probe / lifecycle 脚本里在 kbagent 容器内产生的 orphan 子进程，会以 zombie 形式累积，最终撞 pod PID 上限**。
 
 orphan 来源有两类：
