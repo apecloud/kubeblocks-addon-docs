@@ -94,7 +94,7 @@ Run 7 cleanup 自身又触发下一次 invariant break：
 - §1.1 destructive op trigger preflight：chaos.sh 启动 = 大型 destructive op 入口，必须 preflight guard
 - §1.3 cluster fingerprint preflight：Oracle helm install 落到 `k3d-mssql-kb103b5` → 残留 10 个 cluster-scoped 资源是 cluster fingerprint 漂移的强信号
 - §1.4 cornerstone "default context inheritance ≠ explicit switch"
-- §1.4 mitigation pattern：preflight guard + strict KUBECONFIG check + minified kubeconfig（James `1c0b6a9` + `c0a4ffd` 实战 N=2）
+- §1.4 mitigation pattern：preflight guard + strict KUBECONFIG check + minified kubeconfig（Oracle line `1c0b6a9` + `c0a4ffd` 实战 N=2）
 - §2 row 3 falsification：`kubectl --context=<intended> get cmpd -A` 显式复核
 
 ## 附件

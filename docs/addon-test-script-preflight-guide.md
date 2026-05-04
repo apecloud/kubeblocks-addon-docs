@@ -190,7 +190,7 @@ nohup bash -c 'while true; do kubectl config use-context k3d-mssql-kb103b5 2>/de
 
 跨 line 通告永远不够，**必须程序锁**——已有实战 N=2 双 incident 实证（详见 §2 row 4 / row 4b）。
 
-#### 1.4.f HTTPS_PROXY interception case（Alice 提出，Mac local 高发）
+#### 1.4.f HTTPS_PROXY interception case（Valkey line 提出，Mac local 高发）
 
 macOS 上后台代理 app（Surge / ClashX / Proxifier）会把 HTTPS_PROXY=http://127.0.0.1:6666 注入 env，**且不 bypass IDC CIDR**——任何走 IDC NodePort 的 HTTPS handshake 都会被代理拦截，伪装成各种 cert / routing 错误：
 
@@ -200,7 +200,7 @@ macOS 上后台代理 app（Surge / ClashX / Proxifier）会把 HTTPS_PROXY=http
 
 **Falsification**: `unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy`，再 `curl -v https://<nodeIP>:<port>/`。立刻 OK = 100% 是 client proxy 拦截。
 
-#### 1.4.g Fingerprint 直接复核（Alice 推荐 prose 模式）
+#### 1.4.g Fingerprint 直接复核（Valkey line 推荐 prose 模式）
 
 > 不要在受污染的 default context 上 falsify default context；要用一个**独立 minified kubeconfig**（或显式 `--context=<intended>`）发起 fingerprint 探测。Falsify 的目标是确认"intended cluster 的实际 fingerprint"，不是"当前 default context 看到什么"。如果两者矛盾，结论永远是 default context 已漂，不是 intended cluster 异常。
 
