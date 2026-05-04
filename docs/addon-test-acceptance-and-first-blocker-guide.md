@@ -1072,6 +1072,81 @@ first blocker 至少要先分到下面几类之一：
 
 先把 blocker 放进这五类之一，再决定谁来修、怎么修、要不要继续扩样本。
 
+## 每层对应的 falsification step
+
+分层只是判类的第一步。要把 first blocker 真正落到某一层，必须能跑出**命中那一层**的 falsification 命令——不能只是脑子里"觉得是某层"。下面给每层 2-3 条最常用的命令链 + 期望输出 + 一行解读。具体 7 项 environment gate 全文见 [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md)，本节只列"识别哪一层先 fail"用的关键信号。
+
+### 第 1 层（环境 / 资源门禁）falsification
+
+- `kubectl --kubeconfig <X> --context <X> get crd | grep <controller-domain> | wc -l` —— 期望与本轮 KB 基线匹配（例如 KB 1.0.3-beta.5 = 28）。漂移即 KB CRD 装错或装漏，**不是 addon bug**
+- `kubectl --kubeconfig <X> --context <X> -n <ns> get pod <p> -o jsonpath='{range .spec.containers[*]}{.name}={.image}{"\n"}{end}'` —— 每个容器（含 init / sidecar）逐项核对 imageID 是否落到本轮预期 registry / tag。**漂移即镜像分发未收敛**
+- `kubectl --kubeconfig <X> --context <X> -n <ns> get pod <csi-pod> -o jsonpath='{.status.containerStatuses[*].restartCount}'` —— 期望 0；非 0 即 CSI / dataprotection / vcluster 控制面层异常，**不要继续在该样本下产品结论**
+- 任一信号触发 → 现场 freeze 后切到 [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) 的 7 项 gate 全检；不要在 env 异常样本上推 runtime / 产品 narrative
+
+### 第 2 层（runner / harness / helper）falsification
+
+- `grep -nrE "<anchor1>|<anchor2>" <runner-root>` —— 期望本轮所有 anchor 都被命中。staged copy 漏 anchor 即 runner 没装齐
+- `bash -n <runner.sh>` + `git -C <runner-root> diff --check` —— 期望全绿。语法错或 trailing whitespace 即 runner 自身先 fail
+- runner 内 `kubectl ...` 调用必有 `--kubeconfig + --context` **双锁**（参考 §1.4 of [`addon-test-script-preflight-guide.md`](addon-test-script-preflight-guide.md) — TBD pending PR）；裸 `kubectl` 即 cross-line broadcast 共享 default context 风险
+- 任一信号触发 → 是 runner 自身 bug，**不是 addon 的事**；先修 runner 再重跑
+
+### 第 3 层（测试口径 / 产品语义）falsification
+
+- 单次 snapshot 当 reconverged 判定 → 错。bounded retry 必须显式带 `--max-attempts $N --interval $MS --total-timeout $T`，事件时间戳用真实事件时间不用 sample 时间（参考 [`addon-bounded-eventual-convergence-guide.md`](addon-bounded-eventual-convergence-guide.md) 反模式 5）
+- expected 值硬编码（`expected='3'`）→ 错。链下游 case 对前置 INSERT 数量的依赖必须用变量（如 `EXPECTED_ROWS_POST_T5`）传播，不写死
+- `OpsRequest.phase=Succeed` 当 "下一步可以开始" → 错。还要等动作层 / 拓扑层 / 入口层 / runtime 层各自显式收敛证据再推进
+- 任一信号触发 → 是测试口径 bug，**不是 addon runtime 缺陷**；改测试口径再重跑
+
+### 第 4 层（控制面 / contract）falsification
+
+- `kubectl --kubeconfig <X> --context <X> -n kb-system logs deploy/kubeblocks --since=10m | grep -E 'wait for the workloads|finalizer'` —— 反复出现即可能撞 finalizer 反向死锁，按 [`addon-narrow-scope-force-delete-guide.md`](addon-narrow-scope-force-delete-guide.md) 处方收敛
+- `kubectl --kubeconfig <X> --context <X> -n <ns> get opsrequest <op> -o yaml` —— phase=Succeed 但 cluster.phase 仍 Updating / route 未收敛 / runtime config 未变 → contract 层与数据面层收敛不一致
+- 1s 粒度 TSV 抓 `kbagent` `change-only emit` 与 KB controller `exclusive-role-removal` 时序（参考 [`addon-rolling-day2-role-label-race-guide.md`](addon-rolling-day2-role-label-race-guide.md)）—— 时序错位即三控制环 race
+- 任一信号触发 → 是 KB controller / kbagent / contract 层 bug，**不是 addon 业务层**；归 control_plane 上报，不混进 product 结论
+
+### 第 5 层（Addon / syncer / live-apply 产品）falsification
+
+- 上面 4 层的 falsification step **逐层 rule out** 后才有资格判 product fail
+- N≥2 同条件复现 + cross-cluster 确认（不同 vcluster 或不同 host k8s）—— 单 cluster N=1 不够下 product 结论
+- 把内部 syncer / agent 日志、DB 内部状态（SHOW REPLICA STATUS / SHOW MASTER STATUS）、pod runtime 三方对照
+- 复现条件能稳定收敛后，做 **minimal cut + clean restart** bisection 定位修复点
+
+## Layer-aware evidence 强度对应表
+
+把 [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) 三规则按 layer 应用，强度阈值不同。给 reviewer 一份 layer-aware mapping，避免"产品层 fail 用 N=1 描述"或"环境层每条都要求 N=2"两种相反的 over-/under-claim。
+
+| Layer | N 要求 | Cross-cluster 要求 | Rule-out scope（下结论前必须排除） | 描述强度上限 |
+|-------|--------|---------------------|------------------------------------|---------------|
+| **环境 / 资源门禁** | **N=1 即可** | 不要求（env 层信号本身定位单环境） | 仅排除"这一具体环境的 setup 状态" | "本环境观测到 X" |
+| **runner / harness / helper** | **N=1 即可**（anchor 缺失 / 语法错是二值信号） | 不要求 | 静态 check（`bash -n` + anchor grep）已能下结论 | "runner 自身 bug，已 N=1 锁定" |
+| **测试口径 / 产品语义** | **N≥2 推荐**（如比较 single-shot vs bounded retry 两种口径下行为） | 不严格要求 | test-spec review + bounded retry 复跑 | "口径不匹配产品 contract" |
+| **控制面 / contract** | **N≥2 跨复现** | **推荐**（同 cluster shape 重跑） | KB controller log + ops timeline + kbagent emit 时序三方对照 | "跨 N=2 复现，控制面层 race / contract 漂" |
+| **Addon / 产品真实缺陷** | **N≥2 + cross-cluster 确认** | **必需**（不同 vcluster / 不同 host k8s 排除 env confounder） | 上述 4 层 falsification step **逐层 rule out** | "产品层 fail，已 N≥2 + cross-cluster 锁定" |
+
+> **核心原则**：描述强度 ≤ 证据强度对应那一行的上限。如果你正在写"产品层是 X"但 N=1 + 没排除控制面层，先回退到 "目前最可能的因果是产品层 X，仍有控制面层 Y 没排除"（参考 [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) 规则 A 描述-证据强度对应表）。
+
+## 跨线 case 反链表
+
+下表汇总各 layer 的实战 case anchor，按引擎 / 主题分类。新读者 / 新加入的 line 可以直接去对应 case 看完整闭环；本表只作 **anchor**，不复制 case 正文。
+
+| Layer | Line / 主题 | Case anchor（doc 路径或 sediment thread）|
+|-------|-------------|------------------------------------------|
+| **env** | MySQL · idc2 docker.io 拉不到 → ACR mirror | task #3 evidence `evidence-task3.tar.gz/step4-image/registry-policy.txt`（N=2：`kubeblocks-tools` + `mysql:8.0.35` 同根因，patch live `ComponentVersion/mysql` + `ParametersDefinition/mysql-{5.7,8.0}-pd`，chart 源码不动） |
+| **env** | OceanBase · stale kubeconfig 残留 | `~/.kube/config-ob-vcluster`（旧失效）vs `~/.kube/config-ob-vcluster-raw`（有效）共存 → typo / autocomplete 打错集群 |
+| **env** | All lines · Mac → idc NodePort 路由 | 缺 VPN / 私网路由（如 Mac D 缺 192.168.10.0/24 路由）→ TCP timeout；从 host k8s 内 runner 走 ClusterIP 不受影响 |
+| **env** | k3d · post-restart CSI mount propagation | [`docs/cases/mariadb/post-restart-csi-mount-propagation-case.md`](cases/mariadb/post-restart-csi-mount-propagation-case.md)（kubelet `/var/lib/kubelet` 失去 rshared，PVC 永远 Pending）|
+| **runner** | SQL Server · 360-条 client_failed | 多 line 共用 `~/.kube/config` + `kubectl config use-context` 切走 default context → writer 不带 `--context` 连错集群（参考 r2-writer-context-flip-incident.md，evidence partner James / John）|
+| **runner** | MySQL · runner 镜像分发漏检 | task #2 + task #3 N=2：`kubeblocks-tools` 6 分钟拉不到（task #2）+ docker.io/apecloud/mysql 多版本拉不到（task #3）→ Step 4 image distribution gate 必须含 runner / probe / tools 镜像，不只 addon 引擎主镜像 |
+| **runner** | macOS · bash 3.2 兼容坑 | [`addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md)（空数组 / env-default 时机 / 单条 local 内互引用 / `v\$parameter` 等 7 个常见兼容坑）|
+| **口径** | OceanBase · 测试链 row-count 耦合 | [`docs/cases/oceanbase/oceanbase-test-chain-row-count-case.md`](cases/oceanbase/oceanbase-test-chain-row-count-case.md)（T5 INSERT 后 T7 `expected='3'` hardcoded → chaos 实际成功 false-fail；修复用 `EXPECTED_ROWS_POST_T5` 变量）|
+| **口径** | MariaDB · single-shot 误当 bounded retry | [`docs/cases/mariadb/cm4-bounded-window-helper-semantic-bug-case.md`](cases/mariadb/cm4-bounded-window-helper-semantic-bug-case.md)（`last_elapsed` 误当 reconverged 时间，watch_window=deadline 永远 false-fail）|
+| **control_plane** | OceanBase · KB↔addon role-label race | [`docs/cases/oceanbase/oceanbase-repl-restart-role-label-race-case.md`](cases/oceanbase/oceanbase-repl-restart-role-label-race-case.md)（T10 / T8 双复现 KB exclusive-role-removal × kbagent change-only emit × addon HA auto-failover 三控制环时序）|
+| **control_plane** | MySQL · KB controller 镜像渲染多源 | task #3 `evidence-task3.tar.gz/baseline/config-manager-rendering-anomaly/`（`config-manager` sidecar 来自 `ParametersDefinition.spec.reloadAction.shellTrigger.toolsSetup.toolConfigs[].image`，**不在 ComponentVersion 范围**；patch live PD 后才收敛）|
+| **control_plane** | Cross-line · OpsDef finalizer 反向死锁 | [`addon-narrow-scope-force-delete-guide.md`](addon-narrow-scope-force-delete-guide.md)（cluster ← component ← instanceset ← pod ← kubelet pulling image 反向锁；窄域 force-delete stuck pod，禁 patch finalizer）|
+| **product** | MariaDB · rejoin gate single-shot bug | [`docs/cases/mariadb/rejoin-gate-single-shot-vs-bounded-wait-case.md`](cases/mariadb/rejoin-gate-single-shot-vs-bounded-wait-case.md)（alpha.10 单次 slave_status snapshot 卡 `.replication-pending`；alpha.11 加 30s bounded retry）|
+| **product** | Valkey · stale POD_FQDN_LIST | [`docs/cases/valkey/scale-out-targeted-switchover-stale-pod-list-case.md`](cases/valkey/scale-out-targeted-switchover-stale-pod-list-case.md)（scale-out 后 targeted switchover 漏 fresh candidate FQDN → wait_for_new_master 超时；修复用 `pod_fqdns_with_candidate()`）|
+| **product** | OceanBase · CREATE STANDBY fetch log timeout | [`docs/cases/oceanbase/oceanbase-repl-create-standby-fetch-log-timeout-case.md`](cases/oceanbase/oceanbase-repl-create-standby-fetch-log-timeout-case.md)（bootstrap 忽略 ERROR 4765 假报 ready，user 租户实际卡 CREATING_STANDBY；修复加 SYS LS NORMAL wait gate + ERROR 重试）|
+
 ## 复杂 case 一律 fail-fast，不要混跑
 
 对以下 case，建议默认 fail-fast：
