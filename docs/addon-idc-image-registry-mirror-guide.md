@@ -160,7 +160,7 @@ controlPlane:
 |---|---|---|---|---|
 | idc | ✅ k3s pull 30s | ✅ stable tag PASS | ❌ 不稳 | ✅ Helen + Bob2 已 paved |
 | idc2 | ✅ rancher/k3s 1.4s（实测）| ✅ HTTP 401 + registry/2.0 PASS（idc2 node1+node3 已 cache `apecloud/netshoot:latest`）| ⚠️ vcluster-pro 初次拉取约 90min 最终成功（极慢，不可靠；实测 2026-05-04）→ **后续必须预先 sideload** | ✅ 3-node helper pod (`kb-helpers` ns，debian:12-slim + privileged + hostPath /run/containerd/containerd.sock) 实测 OK（2026-05-04 KBE team 验证）|
-| idc4 | **PLACEHOLDER（Mia / Noah fill）** | **PLACEHOLDER（Mia / Noah fill）** | **PLACEHOLDER** | **PLACEHOLDER** |
+| idc4 | TBD（OB chart 主体走 §3 ACR direct，dockerproxy.net 仅 vcluster bootstrap helper pod / chaos-mesh sideload base image 阶段触发；待 Phase 1 实测）| TBD（idc4 nodeIPs `192.168.10.44/45/46`，containerd `v1.7.15` / `v1.7.28`，host k8s 上 KB v1.0.3-beta.5 已运行；ACR egress 实测待 Phase 0 push/pull credentials unblock）| TBD（预期 NOT 可达，与 idc2 一致；chaos-mesh in vcluster Phase 2 走 §3 sideload 路径）| TBD（pipeline 4 步与 idc / idc2 同 family；helper image base 锁定 `debian:12-slim`（musl helper 不行，§4.4），待 Phase 2 vcluster bootstrap 后实操）|
 
 ## 7. Pull-secret 标准化
 
@@ -204,7 +204,7 @@ addon-vanilla-vcluster-bootstrap-guide.md (James + Noah)
 - §1.1 vcluster helm chart values 完整 image override 示例（Bob2 / Alice）
 - §3 sideload helper pod 完整 manifest（Bob2）
 - §5 各 line 行（Helen / Tom / James / Mia&Noah / Ben）
-- §6 idc4 行（Mia / Noah）
+- §6 idc4 行（Mia / Noah）— 已 partial fill 已 inspected 的 platform inventory 数据点（nodeIPs / containerd version / KB v1.0.3-beta.5 host）+ 标 TBD 待 Phase 0 ACR creds unblock + Phase 1 vcluster bootstrap + Phase 2 sideload 实操后 finalize
 - §7 vcluster syncer secret sync 实测结论（Tom + James 共 sign，PoC verify）
 
 当所有 PLACEHOLDER 收敛 + OPEN QUESTION 闭环后，本文档从 `draft` 升 `stable`。
