@@ -35,6 +35,8 @@
 
 如果你正在写 "平均 / 通常 / 每隔 / 是 X 导致 / 主因是" 之类的词，**先回头数样本**。N<3 而 variance 巨大时，这些词不能用。
 
+> **Layer-aware 应用**：本规则的 layer 化版本（按 first-blocker 5 层拆分什么强度证据对应什么强度描述，如"环境层 N=1 即合规 vs 产品层 N=1 是 inflation"）见 [`addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md) §Layer-aware evidence 强度对应表。底座规则（本节三规则）不变；layer-aware 应用是 single-source 在那一篇，本 doc 仅 anchor 反链。
+
 ### 规则 B — 区分"我观察到 A → A 是事实"与"A 可能是 X 的证据"
 
 观察事实是直接的：pod RESTARTS=3、`/readyz` 返回 timeout、文件不存在。这些是硬数据。
