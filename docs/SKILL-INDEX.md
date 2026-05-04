@@ -65,6 +65,12 @@
 - [`addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md) — 跨平台兼容坑 8 条：macOS bash 3.2 + `set -euo pipefail` 下 7 个 + GNU `seq` vs BSD `seq` zero-count 1 个（空数组、env-default 时机、`local x=$(cmd)`、`seq 1 0` 等）
 - [`addon-test-runner-cadence-discipline-guide.md`](addon-test-runner-cadence-discipline-guide.md) — 长时 runner 操作期间的固定节奏汇报纪律；cadence 是操作者义务，触发器必须独立于 runner 进程
 
+### 6. 协作 / GitHub 提交纪律
+
+多 agent 协作 + GitHub 公开仓库的边界纪律（trailer hygiene / 并发 push cascade / cross-line submission discipline）：
+
+- [`addon-github-submission-discipline-guide.md`](addon-github-submission-discipline-guide.md) — AI provenance trailer 不外漏的硬规则与兜底命令链 + 多 agent 并发推同一 PR branch 的 cascade 事故响应 playbook（force-with-lease lemma / per-commit grep self-check / cascade single-owner-execute / forensic 自查 / content-delta verify 5 条 doctrine）
+
 ### 跨场景方法论（reusable framework）
 
 下面两篇虽然分别出现在场景 2，但本质是 **跨场景方法论**，任何分布式异步系统的判定面或任何外发结论都适用，建议作为团队共同基线：
@@ -106,6 +112,7 @@
 - [`docs/addon-design-contract-review-during-xp-guide.md`](addon-design-contract-review-during-xp-guide.md) — XP 模式 review 阶段的 design-contract challenge checklist。8 类常见设计契约级缺陷（静默 fallback / 非空字段未强制 / 同 commit state 不连续 / sentinel 值传错误 / 条件清理状态枚举不穷尽 / NotFound 短路写入 / terminating vs absent 不区分 / 运算符优先级陷阱）每类含 review 模式 + 修法 + 反面（传统 Dev/Test split 漏掉的概率）；适合 onboarding + pre-commit + review checklist 三种用法
 - [`docs/addon-pvc-rebind-via-workload-intent-guide.md`](addon-pvc-rebind-via-workload-intent-guide.md) — 跨控制器 PVC 所有权交接：OpsRequest 通过 Workload CR annotation 写一段 Workload Intent，Workload 控制器作为 PVC `spec.volumeName` 的唯一写者读 intent 并按其创建 PVC + 释放错绑。5 个不变量（唯一写者 / opsUID 身份 / 可重入 / 4-priority reclaim 推断 / 清理顺序原子）+ 3 个 reconciler 钩子（PVC 创建 / 释放 / pod 创建 gate）+ fail-closed 全表 + 三类验收样本（独立 N=10 / 同 cluster 密集 / controller restart 窗口）
 - [`docs/addon-ship-readiness-multi-phase-validation-guide.md`](addon-ship-readiness-multi-phase-validation-guide.md) — addon 何时算可以 ship 的三段矩阵（baseline / chaos × N / regression × N），累积 N、Wilson 95% CI、ship 阈值表（数据丢失 0% / 服务不可用 5% / transient 30%）、二段判定（产品 fail = 0 + caveat 全 document）+ 5 个常见误判
+- [`docs/addon-github-submission-discipline-guide.md`](addon-github-submission-discipline-guide.md) — 多 agent 协作 + GitHub 公开仓库的边界纪律：(1) AI provenance trailer（`Co-Authored-By: Claude` / `🤖 Generated with` / `noreply@anthropic.com`）不外漏的硬规则与兜底命令链（heredoc + `git commit --amend -m "$(... | sed)"` strip / push 前 grep 自检）；(2) 多 agent 并发推同一 PR branch 的 cascade 事故响应 playbook（force-with-lease lemma：lease 锚 last-fetched remote tip 不防 fetch 后并发 push / 双向 `git log --oneline` ritual / dropped-commit owner self-recover / single-owner-execute 收口）。5 条 doctrine（A force-with-lease / B per-commit grep / C cascade single-owner-execute / D forensic 自查 / E content-delta verify）+ §5 cross-cutting rules（forensic self-review / Doctrine E shorthand / evidence-post obligation / 递归 self-application）
 
 ## 案例材料
 
