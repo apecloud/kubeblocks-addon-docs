@@ -1087,7 +1087,7 @@ first blocker 至少要先分到下面几类之一：
 
 - `grep -nrE "<anchor1>|<anchor2>" <runner-root>` —— 期望本轮所有 anchor 都被命中。staged copy 漏 anchor 即 runner 没装齐
 - `bash -n <runner.sh>` + `git -C <runner-root> diff --check` —— 期望全绿。语法错或 trailing whitespace 即 runner 自身先 fail
-- runner 内 `kubectl ...` 调用必有 `--kubeconfig + --context` **双锁**（参考 §1.4 of [`addon-test-script-preflight-guide.md`](addon-test-script-preflight-guide.md) — TBD pending PR）；裸 `kubectl` 即 cross-line broadcast 共享 default context 风险
+- runner 内 `kubectl ...` 调用必有 `--kubeconfig + --context` **双锁**（参考 [`addon-test-script-preflight-guide.md`](addon-test-script-preflight-guide.md) §1.4 client-network preflight）；裸 `kubectl` 即 cross-line broadcast 共享 default context 风险
 - 任一信号触发 → 是 runner 自身 bug，**不是 addon 的事**；先修 runner 再重跑
 
 ### 第 3 层（测试口径 / 产品语义）falsification
@@ -1124,6 +1124,8 @@ first blocker 至少要先分到下面几类之一：
 | **Addon / 产品真实缺陷** | **N≥2 + cross-cluster 确认** | **必需**（不同 vcluster / 不同 host k8s 排除 env confounder） | 上述 4 层 falsification step **逐层 rule out** | "产品层 fail，已 N≥2 + cross-cluster 锁定" |
 
 > **核心原则**：描述强度 ≤ 证据强度对应那一行的上限。如果你正在写"产品层是 X"但 N=1 + 没排除控制面层，先回退到 "目前最可能的因果是产品层 X，仍有控制面层 Y 没排除"（参考 [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) 规则 A 描述-证据强度对应表）。
+
+> **与 [`addon-evidence-discipline-guide.md`](addon-evidence-discipline-guide.md) 反模式的关系**：本表是该 doc 反模式 "motivated narrative inflation" 与 "N=1 → average / frequency / trend inflation" 的 **layer-aware 应用** —— 把"什么样的描述强度对应什么样的证据强度"按 layer 显式表格化，给 reviewer 一份层粒度的 over-/under-claim 约束工具。底座的"对自己结论 bounded retry / 不二选一表述 / 数据不足显式说"三规则不变；本表只把强度阈值按 layer 拆分（环境层 N=1 即合规 vs 产品层 N=1 是 inflation）。single-source 在本表，evidence-discipline doc 仅作 anchor 反链。
 
 ## 跨线 case 反链表
 
