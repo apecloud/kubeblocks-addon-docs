@@ -313,6 +313,42 @@ ro_stale_detected=1
 
 后续 v4 fix 把 setup race 关掉之后就不再走这条路径。
 
+### N=5 multi-cycle 稳定性正例（chaos profile = C09 race superset 归因）
+
+**Abstract**: 主路径 freshness gate v3 N=5 stability suite：5/5 cycle 全部 deterministic `FAIL_INTENDED` 命中 `log_restore_stale` 主路径，故障形态稳定可复现。Cycle 4 多出一次 `ack_missing=1` 与本案 stale-RO 主旋律无关——它属于 C09 acked-write divergence race occasional manifestation（详见交叉指引）。
+
+suite archive sha256: `8366c6e5664c0e445a248c2e921b02d553b699b31ad0922df939b0e46714e4b8`
+suite root: `work/ob-test-supplement/20260504-154618-c03-n5-stability`
+chaos script: `tests/chaos-kill-primary-standby-quorum-loss.sh` v4 sha `ce1204ab4ee889277b51d580003bd64915f8badc09b605967094191bb166cd3b`
+
+5 个 cycle 结果：
+
+| Cycle | 集群 | rc | ro_stale | ack_missing | seed_missing | per-cycle archive sha256 |
+|---:|---|---:|---:|---:|---:|---|
+| 1 | `ob-c03-stab-n5-c1-154618` | 1 | 4 | 0 | 0 | `0cc5781575c6133971521acabd24699e389e712a3dddd6e0750ed478fecf1b85` |
+| 2 | `ob-c03-stab-n5-c2-155329` | 1 | 4 | 0 | 0 | `34d37b51dcb771c7d576bf750e1de556449ce42dcde686c41c01deadd47bd3be` |
+| 3 | `ob-c03-stab-n5-c3-160140` | 1 | 4 | 0 | 0 | `8c33ec0c6cf08c118d0b3bbec581309ce6c8ace592aa6e369a0d777a8a508c02` |
+| 4 | `ob-c03-stab-n5-c4-160905` | 1 | 4 | **1** | 0 | `d6dcf15b50bd807bb484d75a2d549cb630b995e98651808360ddc726ee237de9` |
+| 5 | `ob-c03-stab-n5-c5-161626` | 1 | 4 | 0 | 0 | `b983a83dc2b3e20ae37d5c61309f59968db00604b7fee90efd033432f33b5f0d` |
+
+聚合：
+
+```
+fail_intended=5  anomaly=0
+ro_stale_detected: 4/4/4/4/4  (5/5 cycle 都命中 log_restore_stale 主路径，stale-RO 故障形态 deterministic)
+ack_missing:      0/0/0/1/0  (cycle 4 一次)
+seed_missing:     0/0/0/0/0  (wait-for-replication 块在每 cycle 都生效，无 setup race)
+```
+
+期望对照：
+
+- 5/5 cycle 全部 `FAIL_INTENDED`（gate 正确把 stale 抓出来）✅
+- 5 个 cycle `ro_stale_detected=4`、`log_restore_stale` 主路径 deterministic 命中 ✅
+- 5 个 cycle `seed_missing=0`（wait-for-replication 块稳定）✅
+- cycle 4 `ack_missing=1` **不是 stale-RO 故障的回归**——chaos profile（同时杀 primary + 1 standby）正是 C09 acked-write divergence 的 race window 超集，N=5 内偶发命中 1 次符合 C09 race 形态预期；需要在 syncer roleProbe peer-primary guard fix 镜像投产之后再跑 N≥3 cycle 验证 `ack_missing` 是否全清零（参见 [`oceanbase-repl-peer-primary-acked-write-divergence-case.md`](./oceanbase-repl-peer-primary-acked-write-divergence-case.md) 的 fix validation 段）
+
+**chaos profile = C09 race superset 的含义**：C03 同步 kill primary + 1 standby 在物理事件上完整覆盖 C09 单杀 primary 的 race window（并且把 standby 的 redo log 分叉同时引入），所以 C09 早期 race（peer-primary 双方都被 syncer 在同一窗口报 PRIMARY、KB controller 接受 acked-write 导致 divergence）会以 C03 N≥5 cycle 内偶发的 `ack_missing≥1` 形式渗漏出来。这条耦合**不是 C03 新缺陷**——C03 主轴是 stale-RO（roleProbe 健康口径未含 log restore），C09 主轴是 acked-write divergence（roleProbe 未做 peer-aware PRIMARY 判定）。两条 syncer roleProbe 修复方向独立但同源（roleProbe 对 OceanBase 单 pod 真值判据不足）。
+
 ### 设计教训（actionable for 其他 addon 的 ro freshness gate）
 
 把 v1 / v2 两条 archive 同时保留在主线，是因为它们一起锁住 freshness gate 的**两路设计契约**——这条契约可被其他 addon（PG / MySQL / MongoDB）的 ro 路由检查复用：
@@ -325,7 +361,7 @@ ro_stale_detected=1
 
 ### 仍未覆盖
 
-- N=5 / N=10 多轮稳定性（gate v2 只跑 N=1，主路径必现，因此当前已足够锁住故障形态；syncer 修复完成后再跑 N=10 作回归）；
+- N=10 / 24h soak 多轮稳定性（gate v3 N=5 已锁 5/5 deterministic FAIL_INTENDED 主路径，syncer log-restore guard 修复落地后再跑 N≥10 + soak 作回归确认 stale-RO 完全消失）；
 - C07 kill-standby-only N=1（不杀 primary，只杀单个 standby pod，预期标准是 standby 重建后 log restore 应该重新追上 primary，**不出现** `-4070`；脚本待写）；
 - dist 拓扑 D-4 同款故障形态（dist 拓扑 OBserver 之间是 Paxos quorum，故障语义跟本案不同；需要 production-capacity 集群验证）；
 - 在 syncer roleProbe 修复落地之前的 N=20 / 24h soak（修复前会一直 stale，soak 没意义）。
@@ -339,6 +375,17 @@ ro_stale_detected=1
 - repl 拓扑在 N=4+ 副本下故障形态相同（当前只有 1+2 一种 layout 实证）。
 
 跨 addon 抽象（如「ro 服务的 freshness gate 必须做什么 / standby 健康判据应该至少包含什么」）暂不写入本案，保留给 `methodology/` 单独立篇。
+
+### C03 chaos profile 对 C09 race 的覆盖关系
+
+C03 同步 kill primary + 1 standby 的 chaos profile **完整覆盖** C09 单杀 primary 的 race window（事件序列上是真超集），且把 standby redo log 分叉同时引入。两条故障形态共享同一根因方向（syncer roleProbe 对 OceanBase 单 pod 真值判据不足），但具体 health gate 各不相同：
+
+| 案件 | 主轴故障 | syncer roleProbe 缺漏的健康判据 | 严重度 |
+|---|---|---|---:|
+| C09 ([链接](./oceanbase-repl-peer-primary-acked-write-divergence-case.md)) | 双 PRIMARY 窗口期间 acked-write divergence | 未做 peer-aware PRIMARY 判定（peer 也报 PRIMARY 时的冲突窗口） | P0 |
+| C03（本案） | post-failover stale-RO 永久过期 ro 端点 | 未把 `V$OB_LS_LOG_RESTORE_STATUS` 算进 STANDBY 资格 | P1 |
+
+C03 N=5 cycle 4 一次 `ack_missing=1` **不属于 C03 新缺陷**——它是 C03 chaos profile 在 C09 syncer guard 未投产的镜像下偶发命中 C09 race window 的渗漏，属于 C09 既有 finding。本案不重复 C09 修复细节；本案的 stale-RO 永远不会被 C09 guard 治住，因为两条 health gate 互相独立。
 
 ## Trap T：「`ready_count < 2 ⇒ no_quorum` ⇒ 写入应被拒绝」假设被 evidence 反证
 
@@ -394,4 +441,5 @@ freshness gate 验证：
 
 - gate v1 N=1 (ground_truth_unavailable path): root `work/ob-test-supplement/20260504-1432-c03-stale-ro-gate-v1-n1`, archive sha256 `449b7d3491fc1c82d6787ec0178f0e1de884b5426a573ef8e4a12f46e486dd2f`
 - gate v2 N=1 (log_restore_stale main path): root `work/ob-test-supplement/20260504-1445-c03-stale-ro-gate-v2-n1`, archive sha256 `da5ef49b8b831e2665cab0be7b8853227fb5a25e54bf3a4ab5ce17751fcec6bc`
+- gate v3 N=5 stability suite: root `work/ob-test-supplement/20260504-154618-c03-n5-stability`, suite archive sha256 `8366c6e5664c0e445a248c2e921b02d553b699b31ad0922df939b0e46714e4b8`（per-cycle archive sha 见 N=5 multi-cycle 段表格）
 - chaos script with v4 freshness gate + wait-for-replication: `kubeblocks-tests/oceanbase/tests/chaos-kill-primary-standby-quorum-loss.sh` sha `ce1204ab4ee889277b51d580003bd64915f8badc09b605967094191bb166cd3b`

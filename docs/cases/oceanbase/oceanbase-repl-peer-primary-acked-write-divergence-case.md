@@ -302,6 +302,20 @@ Harness caveat（值得记录的踩坑）：
 - 最终 N=10 summary 把 timeout 检测限定在「当前 cycle cluster / pod / event / log 名字」范围内。
 - 教训：grep evidence 检测一定要 scope 到当前测试的资源 name，否则会被 namespace 内其他历史制品污染。这条教训跟资源 hygiene（清理历史 cluster）配合更安全。
 
+### Cross-case validation expected（post-image-bump C03 N≥2-3 ack_missing=0）
+
+C09 guard v1 + timeout-isolation 已经在自家 chaos profile 上稳定（N=10 cumulative `ack_missing=0`），但 C09 race window 是 [C03 chaos profile](./oceanbase-repl-post-failover-stale-ro-case.md) 的真子集（C03 同时杀 primary + 1 standby，事件序列上完整覆盖 C09 单杀 primary 的 race window，并且把 standby redo log 分叉同时引入）。
+
+具体表现：C03 freshness gate v3 N=5 stability suite (`8366c6e5664c0e445a248c2e921b02d553b699b31ad0922df939b0e46714e4b8`) 在 C09 guard 未投产的旧 syncer 镜像下出现 cycle 4 `ack_missing=1`。这次渗漏属于 C09 既有 finding，**不是 C03 新缺陷**——C03 主轴是 stale-RO（log restore 健康未入 STANDBY 资格），C09 主轴是 acked-write divergence（peer-aware PRIMARY 判定缺失）。
+
+因此 C09 guard fix 完成 image bump 之后必须在 C03 chaos profile 上做一轮 cross-validation：
+
+- 测试入口：`kubeblocks-tests/oceanbase/tests/chaos-kill-primary-standby-quorum-loss.sh`（C03 同步 kill chaos profile）
+- syncer 镜像：含 C09 peer-primary guard fix
+- 期望：C03 N≥2-3 cycle 累计 `ack_missing=0`（C03 stale-RO 主路径仍会 fail，因为 C03 log-restore guard 不在 C09 fix 范围内；但 acked-write divergence 渗漏应该清零）
+
+这条 cross-validation 不属于 C09 fix 完整性 gate（C09 自家 N=10 已闭环），但属于 C03 案例的故障归因闭环——只有跑完，才能把 C03 N=5 cycle 4 的 `ack_missing=1` 显式 attribute 给 C09 race 而不是任何新 bug。
+
 ### 设计教训（actionable for 其他 addon 的 sidecar role 安全口径）
 
 把 Guard v1 + N=10 timeout isolation 的两条核心契约抽象出来，对 PG / MySQL / MongoDB 等其他 addon 的 sidecar role probe 同样适用：
