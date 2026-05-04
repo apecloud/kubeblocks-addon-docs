@@ -233,6 +233,8 @@ trace 字段建议：`logRestoreSyncStatus / logRestoreErrCode / decisionReason=
 
 ### freshness gate 主路径正例
 
+**Abstract**: 主路径 N=1 验证：v2 freshness gate fix 在 happy path（standby 正常拉到 seed + 复制后被杀恢复）下正确把 stale ro detect 出来，TDD 设计预期 FAIL（`stale-secondary-detected: 4 standby check(s) failed`）命中 21/1/0。
+
 archive sha256: `da5ef49b8b831e2665cab0be7b8853227fb5a25e54bf3a4ab5ce17751fcec6bc`
 root: `work/ob-test-supplement/20260504-1445-c03-stale-ro-gate-v2-n1`
 chaos script: `tests/chaos-kill-primary-standby-quorum-loss.sh` sha `ce1204ab4ee889277b51d580003bd64915f8badc09b605967094191bb166cd3b`
@@ -276,6 +278,8 @@ ro_stale_detected=4
 PASS 21 / FAIL 1 / SKIP 0，唯一 FAIL 是 stale-secondary-detected，跟 TDD 设计一致。
 
 ### freshness gate ground_truth_unavailable 路径正例
+
+**Abstract**: ground_truth_unavailable 短路保守路径 N=1 验证：当 chaos 来得太早 standby 还没拉到 seed、survivor 接管成 new primary 后没有表，主路径 ground truth 拿不到 → freshness gate 降级走保守 fail-stop 不漏 stale。验证设计意图："拿不到就保守 fail，不 silent skip"。
 
 archive sha256: `449b7d3491fc1c82d6787ec0178f0e1de884b5426a573ef8e4a12f46e486dd2f`
 root: `work/ob-test-supplement/20260504-1432-c03-stale-ro-gate-v1-n1`
