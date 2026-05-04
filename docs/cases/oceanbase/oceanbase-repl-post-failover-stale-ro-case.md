@@ -1,11 +1,12 @@
 # OceanBase repl 拓扑：(primary + 1 standby) 同步 kill 后 standby 仍被 ro service 选中并返回过期数据案例
 
-> 案例补充。通用方法论参考 `methodology/`（待写）。
-> Audience: OceanBase addon developer/tester + KubeBlocks roleProbe / sidecar (syncer/kbagent) 维护者。
-> Status: draft case material for Allen review / docs handoff.
-> Applies to: OceanBase replication 拓扑 (`oceanbase-rep-ocp-1.0.3` + KubeBlocks v1.0.2) C03 同时 kill primary pod + 1 个 standby pod 的 chaos 场景。
-> Does not prove: OceanBase distribution 拓扑 / 生产 D-4 / RootService 故障域 / zone failure。
-> Affected by environment: 3-pod repl topology (primary + 2 standby), 4Gi request per pod, k3d Machine B 双节点。
+> **Audience**: OceanBase addon developer / tester；KubeBlocks roleProbe / sidecar (syncer / kbagent) 维护者
+> **Status**: draft
+> **Applies to**: OceanBase replication 拓扑（`oceanbase-rep-ocp-1.0.3`，3-pod primary + 2-standby + 4Gi request/pod）；C03 同时 kill primary pod + 1 standby pod chaos 场景
+> **Applies to KB version**: KB v1.0.2 验证；KB roleProbe + ro service 选择行为跨版本演化待评估
+> **Affected by version skew**: KB roleProbe + sidecar (syncer / kbagent) 实现演化
+
+属于：[`addon-control-plane-election-guide.md`](../../addon-control-plane-election-guide.md) 的工程现场补充（roleProbe 健康口径 / role 标签 / ro service 端点选择）。Trap T 段同时是 [`addon-evidence-discipline-guide.md`](../../addon-evidence-discipline-guide.md) 反模式实证（早期错误假设被 evidence 反证）。
 
 ## Summary
 
@@ -35,6 +36,16 @@ C03 测试一条「post-failover 数据可见性」契约：当 primary pod 和 
 > ⚠️ 把这套拓扑当成「3 副本 Paxos / N=3 observer 集群 → kill 2 ⇒ no-quorum」是错误模型。这个拓扑里 OB 没有跨 observer 的 quorum；任何「N-2 quorum loss / 旧 quorum lease 接受写入」的论证都不适用，参见下一节里的反证证据。
 
 westonnnn 已澄清：repl 是 dev/test 拓扑，生产用 dist。本案不涵盖 dist 拓扑同款故障是否会出现；那部分需要在 dist D-4 production-capacity 集群上重新验证。
+
+### 不适用范围
+
+本案 evidence 不证明以下任何一项：
+
+- OceanBase distribution 拓扑（`oceanbase-dist-ocp-1.0.x`）下同款 chaos 是否出现 stale-RO（dist 跨 OBserver 跑 Paxos quorum，故障语义跟本案不同；要 dist D-4 production-capacity 集群再验）；
+- 生产 D-4 部署 / RootService 故障域 / zone-级 failure；
+- repl 拓扑在 N=4+ 副本下故障形态相同（当前只有 1 primary + 2 standby 一种 layout 实证）。
+
+环境依赖：3-pod repl topology, 4Gi request/pod, k3d Machine B 双节点；这些参数不影响 stale-RO 是否出现的结论，只影响复现速度和资源占用。
 
 ## Reproduction conditions
 
