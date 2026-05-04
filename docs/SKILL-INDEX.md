@@ -44,6 +44,7 @@
 测试 runner 跑起来之前 / 测试机重启后 / 镜像 / 路由 / CSI / Backup 前置：
 
 - [`addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) — 环境就绪逐项坐实清单（API 路由 / 控制器身份 / CSI / 镜像分发 / staged anchors / fresh slot / capability），post-restart 禁止复用 pre-restart 事实
+- [`addon-test-script-preflight-guide.md`](addon-test-script-preflight-guide.md) — **跨 line / 多 tenant / shared mutable state 视角**：把 `~/.kube/config` current-context、HTTPS_PROXY、`/tmp/kubeconfig-*.yaml` 残留等共享 client state 当 protected invariant；trigger-event-driven preflight；①程序锁 + ②fingerprint + ③fail-fast 三层防御；N=4 cross-line evidence pool（Valkey/SQL Server/Oracle/MySQL）；voice-commitment-not-invariant 实证。是 `addon-test-environment-gate-hygiene-guide.md` 的 cross-line 补集
 - [`addon-k3d-kubeconfig-loopback-fix-guide.md`](addon-k3d-kubeconfig-loopback-fix-guide.md) — k3d 默认 kubeconfig server 写成 `0.0.0.0` 在 macOS 报 EOF；统一改 `127.0.0.1`
 - [`addon-k3d-image-import-multiarch-workaround-guide.md`](addon-k3d-image-import-multiarch-workaround-guide.md) — k3d 节点拉 docker.io 超时 + `k3d image import` 在 multi-arch manifest 上的静默 bug；走 host `docker save` + 节点 `ctr import`
 - [`addon-k3d-backup-restore-prereqs-guide.md`](addon-k3d-backup-restore-prereqs-guide.md) — k3d 跑 Backup/Restore 的两层前置：装 VolumeSnapshot CRD + 建默认 BackupRepo
@@ -81,6 +82,7 @@
 - [`docs/addon-test-acceptance-and-first-blocker-guide.md`](addon-test-acceptance-and-first-blocker-guide.md) — 测试成功语义、bounded eventual convergence、first blocker 分层、validation-only gate 身份固定、现场冻结和测试资产统计口径
 - [`docs/addon-test-probe-classification-guide.md`](addon-test-probe-classification-guide.md) — 一次探针失败如何分到正确的层（`route_api` / `<client>_<channel>` / `empty_output` / `parse_empty` / `runtime_mismatch` / `real_*_mismatch`），以及写探针的 7 条硬规则
 - [`docs/addon-test-environment-gate-hygiene-guide.md`](addon-test-environment-gate-hygiene-guide.md) — 测试 runner 跑起来之前的环境就绪逐项坐实清单（路由/控制面/CSI/镜像分发/staged anchors/fresh slot/capability），尤其 post-restart 场景禁止复用 pre-restart 事实
+- [`docs/addon-test-script-preflight-guide.md`](addon-test-script-preflight-guide.md) — 跨 line / 多 tenant / shared mutable state 场景下，把共享 client state 当 protected invariant 处理的 trigger-event-driven preflight 方法论。四类 preflight category（context / namespace / cluster fingerprint / client-network），每类绑定具体 trigger event；①程序锁（`--context=` / `KUBECONFIG=`）+ ②fingerprint（API server URL / TLS SAN / CRD count）+ ③fail-fast assert（`KUBE_STRICT=1`）三层防御；voice commitment is not invariant 实证；N=4 cross-line evidence pool（Valkey Bob2 boot-up 30s / SQL Server r2 mid-soak 35min / Oracle Run 7 + r2 W2 post-voice-commit 1h+ / MySQL bastion adoption），双 incident appendix 收录到 `cases/methodology/`
 - [`docs/addon-bounded-eventual-convergence-guide.md`](addon-bounded-eventual-convergence-guide.md) — 对异步收敛系统的状态判定必须 bounded retry，不能单次 snapshot；适用于测试 helper 与 addon 业务代码两侧。含 5 个 MariaDB 真实反模式 + 通用模板 + 7 条硬规则
 - [`docs/addon-tls-guide.md`](addon-tls-guide.md)
 - [`docs/addon-control-plane-election-guide.md`](addon-control-plane-election-guide.md)

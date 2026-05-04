@@ -8,6 +8,8 @@
 
 本文面向 Addon 测试工程师与技术负责人，重点解决"机器/容器重启之后、跑测试之前，测试环境本身能不能用"的问题。它不是关于产品 / addon 的成功语义，而是关于**让 first blocker 不要落在测试环境本身**。
 
+> **跨 line 补集**: 当多个 addon line 共享同一台 Mac / IDC bastion / shared vcluster 时，client-side mutable state（`~/.kube/config` current-context、HTTPS_PROXY、`/tmp/kubeconfig-*.yaml` 残留）会被任一 line 改写并污染所有 line。这部分见 [`addon-test-script-preflight-guide.md`](addon-test-script-preflight-guide.md)，是本文（单 line / 单环境 post-restart 视角）的 cross-line / multi-tenant / shared mutable state 补集。
+
 ## 适用场景
 
 - 跑任何 smoke / chaos / regression 之前
