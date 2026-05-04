@@ -52,7 +52,23 @@ dockerpull.com       ← 二回退
 docker.1panel.live   ← 三回退
 ```
 
-> **PLACEHOLDER（Bob2 / Alice fill）**：vcluster helm chart values 完整 image override 示例（k3s control plane + syncer image 都要 cover；syncer image 走 ghcr.io 时如何处理）
+**vcluster k3s control-plane image override**（Valkey 在 idc2 实测：k3s image 29s 拉完）：
+
+```yaml
+# vcluster values override — k3s 镜像走 dockerproxy.net mirror
+# Mirror chain fallback: dockerproxy.net (主) → docker.m.daocloud.io → dockerpull.com → docker.1panel.live
+controlPlane:
+  distro:
+    k3s:
+      image:
+        registry: dockerproxy.net
+        repository: rancher/k3s
+        tag: v1.27.11-k3s1
+```
+
+**vcluster-pro image**（`ghcr.io/loft-sh/vcluster-pro:0.25.1`）：没有可用 public mirror —— 必须走 sideload pipeline（§3）。sideload 后 vcluster helm values 把 image 字段指向本地已 import 的 tag，并显式设置 `imagePullPolicy: Never`。
+
+> **PLACEHOLDER（Bob2 fill after T04 round 2 evidence）**：sideload 后 vcluster values image override 完整示例 + syncer image 处理细节
 
 ### 1.2 ACR 直拉 + pull-secret 部署位置
 
