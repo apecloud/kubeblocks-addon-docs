@@ -62,6 +62,7 @@
 
 写测试基础设施 / shell helper / 跨平台 portability：
 
+- [`addon-host-runner-job-pattern-guide.md`](addon-host-runner-job-pattern-guide.md) — IDC / remote vcluster 测试脚本迁到 host k8s Job 的模式：vcluster kubeconfig Secret、script ConfigMap、artifact PVC、probe-first、runner image/toolchain、artifact retrieval、cleanup/audit window
 - [`addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md) — 跨平台兼容坑 8 条：macOS bash 3.2 + `set -euo pipefail` 下 7 个 + GNU `seq` vs BSD `seq` zero-count 1 个（空数组、env-default 时机、`local x=$(cmd)`、`seq 1 0` 等）
 - [`addon-test-runner-cadence-discipline-guide.md`](addon-test-runner-cadence-discipline-guide.md) — 长时 runner 操作期间的固定节奏汇报纪律；cadence 是操作者义务，触发器必须独立于 runner 进程
 
@@ -95,6 +96,7 @@
 - [`docs/addon-k3d-kubeconfig-loopback-fix-guide.md`](addon-k3d-kubeconfig-loopback-fix-guide.md) — k3d 默认把 kubeconfig server 写成 `https://0.0.0.0:<port>`，macOS / 部分 Linux 报 EOF；统一改 `127.0.0.1`（含一次性、脚本、集群创建时三种修法）
 - [`docs/addon-k3d-image-import-multiarch-workaround-guide.md`](addon-k3d-image-import-multiarch-workaround-guide.md) — k3d 节点拉 docker.io 超时（host 拉得动）的 host-side `docker save` + 节点 `ctr import` 注入路径；同时绕开 `k3d image import` 在 multi-arch manifest 上的静默 bug
 - [`docs/addon-k3d-backup-restore-prereqs-guide.md`](addon-k3d-backup-restore-prereqs-guide.md) — k3d 上跑 KB Backup/Restore 的两层环境前置：装 VolumeSnapshot CRD（让 dataprotection controller 起来）+ 建默认 BackupRepo（让 Backup CR 不再 NoDefaultBackupRepo），引擎无关
+- [`docs/addon-host-runner-job-pattern-guide.md`](addon-host-runner-job-pattern-guide.md) — 把 IDC / remote vcluster 测试脚本从 Mac / port-forward 迁到 host k8s Job 的通用 pattern：runner namespace / SA / kubeconfig Secret / script ConfigMap / artifact PVC / probe Job / full-run Job / image-toolchain / artifact retrieval / cleanup audit window
 - [`docs/addon-test-runner-portability-guide.md`](addon-test-runner-portability-guide.md) — 跨平台兼容坑 8 条：macOS bash 3.2 + `set -euo pipefail` 下 runner 的 7 个常见 bash 版本差异坑（空数组、env-default 时机、单条 local 内互引用、`v\$parameter`、`local x=$(cmd)` 等）+ 1 条 GNU `seq` vs BSD `seq` zero-count 隐蔽差异（macOS BSD `seq 1 0` 输出 `1 0` 让 zero-count loop 跑两次而非跳过）+ 自检清单
 - [`docs/addon-probe-script-fork-and-zombie-guide.md`](addon-probe-script-fork-and-zombie-guide.md) — addon probe / lifecycle 脚本里 fork 后台子进程在 kbagent / business 容器内累积 zombie 的两类机制：**Pattern A（显式 fork：`&` / nohup / setsid）** ~5-14/min 撞 pids.max；**Pattern B（隐式 timeout-kill orphan：pipeline / `$(...)` 子进程在 kbagent SIGKILL 父脚本时 orphan）**~0.04% probes 低速率但同 cell。统一 4D audit checklist（execution context × fork source × frequency × reaper）；valkey check-role.sh fix 验证（前 14/min → 后 0/min）+ mariadb #402 Pattern B 实证 + OceanBase audit pass scope carve-out
 - [`docs/addon-k3d-host-precheck-guide.md`](addon-k3d-host-precheck-guide.md) — 跑 smoke / chaos 之前先跑 host-level k3d precheck（API 可达性 + 延迟 + 集群 CPU/MEM 水位 + stuck 检测）。配套工具 `kubeblocks-tests/scripts/k3d-precheck.sh`（zsh，三档输出：表格 / JSON / quiet exit）；含 4 个 tooling / ownership 通用坑（k3d kubeconfig 0.0.0.0 / k3d v5 label 变更 `k3d.cluster` / macOS bash 3.2 限制 / 跨 team 借用 k3d 造成版本偏移）+ runner 集成 pre-hook + 三台测试机（Machine A/B/C）跨主机 ops profile baseline
