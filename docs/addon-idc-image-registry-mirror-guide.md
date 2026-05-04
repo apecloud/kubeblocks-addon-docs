@@ -132,7 +132,7 @@ docker.1panel.live   ← 三回退
 | SQL Server | §3 ACR | n/a (chart 无 docker.io) | 7-image 全 ACR（mssql×5 stable tag CU 编号锁定 + syncer 0.7.2 + prometheus-mssql-exporter 1.3.2，~7GB total） | n/a 直接；间接 chaos-mesh Phase 2 触发 | 无主体；chaos-mesh 走 §3 路径 | n/a 当前 | Tom / Jerry — idc2 ACR probe HTTP 401 + registry/2.0 PASS |
 | Oracle | §3 ACR | n/a（chart 无 docker.io 主流依赖） | 4-image enterprise + runner toolchain（apecloud-registry.cn-zhangjiakou，含 oracle:12.2.0.1-ee 几 GB） | n/a 直接；间接 chaos-mesh + cert-manager + vcluster syncer | Oracle 主 DB image 几 GB（Phase 2 PoC 走 §3 sideload 路径） | n/a 当前 | James / John — chart 0 ghcr.io / docker.io 依赖（已 audit）|
 | OceanBase | §3 ACR + 大 image sideload | n/a | OB enterprise image (~3GB) 走 ACR；blocker = westonnnn pending push/pull credentials | chaos-mesh sideload Phase 2 | OB enterprise ~3GB 必走 §3 sideload pipeline | n/a 当前 | Noah / Mia — idc4 |
-| KBE | §3 ACR + 5th image sideload | n/a | 4 件套 (apiserver / dms / openconsole-default / openconsole-admin) 全 ACR + cr4w/redis/hook (production registry) | n/a 直接 | KBE 自建 Playwright runner image (debian:12-slim + node 18 + chromium，第 5 个 sideload) | KBE chart values 覆盖 | Ben / Ava — idc2 |
+| KBE | §3 ACR + sideload 4 dev images | n/a（chart 无 docker.io 依赖） | cr4w / redis / hook / mysql 等 stable image 走 ACR 直拉；apiserver / dms / openconsole 4 件套为本地 source build (`local/*`) 走 sideload | vcluster-pro:0.25.1 — 初次拉取极慢（实测 idc2 约 90min 最终成功，不可靠）→ 后续必须预先 sideload | 4 dev image (apiserver / dms / openconsole-default / openconsole-admin) 全走 sideload pipeline（amd64 rebuild + helper pod + ctr import）；5th image: KBE runner (debian:12-slim + node 18 + Playwright + chromium) | KBE chart 不支持 `--set images.registry=local`（单 anchor 破 cr4w/redis），必须 post-install `kubectl set image` patch 4 个 deployment + `imagePullPolicy: Never` | Ava / Ben — idc2，sideload pipeline 2026-05-04 实测 OK（helper pod: kb-helpers ns，3 nodes） |
 
 > 各 line owner 在 PR review 阶段填具体 cell 里的实测数据点（image tag / pull 时间 / 实测命令）。
 
@@ -143,7 +143,7 @@ docker.1panel.live   ← 三回退
 | IDC | docker.io via dockerproxy.net | apecloud-registry.cn-zhangjiakou ACR | ghcr.io 直拉 | sideload pipeline 已就位 |
 |---|---|---|---|---|
 | idc | ✅ k3s pull 30s | ✅ stable tag PASS | ❌ 不稳 | ✅ Helen + Bob2 已 paved |
-| idc2 | ✅ rancher/k3s 1.4s（实测）| ✅ HTTP 401 + registry/2.0 PASS（idc2 node1+node3 已 cache `apecloud/netshoot:latest`）| ❌ vcluster-pro 22min+ ImagePullBackOff（实测）| ✅ Helen `tools/sideload-image.sh` 在 idc2 实际跑过 |
+| idc2 | ✅ rancher/k3s 1.4s（实测）| ✅ HTTP 401 + registry/2.0 PASS（idc2 node1+node3 已 cache `apecloud/netshoot:latest`）| ⚠️ vcluster-pro 初次拉取约 90min 最终成功（极慢，不可靠；实测 2026-05-04）→ **后续必须预先 sideload** | ✅ 3-node helper pod (`kb-helpers` ns，debian:12-slim + privileged + hostPath /run/containerd/containerd.sock) 实测 OK（2026-05-04 KBE team 验证）|
 | idc4 | **PLACEHOLDER（Mia / Noah fill）** | **PLACEHOLDER（Mia / Noah fill）** | **PLACEHOLDER** | **PLACEHOLDER** |
 
 ## 7. Pull-secret 标准化
