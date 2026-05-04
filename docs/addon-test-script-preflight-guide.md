@@ -1,7 +1,7 @@
 # Addon 测试脚本 Preflight 指南 — 把共享 client 状态当 protected invariant
 
 > **Audience**: addon dev / test / TL，特别是在多 line 共享同一台 Mac / IDC bastion / shared vcluster 上跑 long-running 测试的人
-> **Status**: draft v0.2 (2026-05-04)
+> **Status**: draft v0.3 (2026-05-05)
 > **Applies to**: 任何 KB addon 的测试 runner / soak / chaos / smoketest 工具链
 > **Applies to KB version**: any（client-side discipline，与 KB / addon 版本解耦）
 > **Affected by version skew**: 不受 KB 版本影响
@@ -63,18 +63,18 @@
 
 Invariant 不变 → 不需要重复验证。Invariant 可能因为某个事件而变 → 在事件**之后**立刻验证一次。
 
-## 0.5 跨 line 实证证据池（N=4 evidence pool）
+## 0.5 跨 line 实证证据池（N=3 incident + MySQL adoption/fingerprint evidence）
 
-本文 doctrine 不是单 line 经验外推，而是 **2026-05-04 当天 4 条 line 各自独立踩到同 family 问题**之后归纳成的：
+本文 doctrine 不是单 line 经验外推，而是 **2026-05-04 当天 3 条 line 各自独立踩到同 family incident + MySQL line 提供 adoption + fingerprint 维度证据**之后归纳成的：
 
-| Line | Incident 锚点 | 同 family 体现 | mitigation 模式 |
-|---|---|---|---|
-| **Valkey** | Bob2 boot-up incident msg=3961e096，shared `~/.kube/config` 残留 stale context 导致 boot-up self-catch | 共享 client state 残留污染 → addon helm install 落到错 cluster | ①程序锁（每脚本 `--context=`）+ ②fingerprint（boot-up server URL 探测） |
-| **SQL Server** | r2 writer context-flip artifact 双窗口 408 条 client_artifact entries（[`cases/methodology/r2-writer-context-flip-2026-05-04-case.md`](cases/methodology/r2-writer-context-flip-2026-05-04-case.md)） | 67 处 kubectl 不 pin context → default context 被 Oracle line 切走 → writer 读到空 ns | ①kube() wrapper + ②minified kubeconfig file + ③`KUBE_STRICT=1` 三层防御 |
-| **Oracle** | Run 7 chaos.sh 跑进 `k3d-mssql-kb103b5`（[`cases/methodology/run7-context-inheritance-2026-05-04-case.md`](cases/methodology/run7-context-inheritance-2026-05-04-case.md)），10 个 cluster-scoped 残留 + 24min cleanup wall-clock | chaos.sh 启动不锁 context → 继承 prior line 的 default | preflight guard（James `1c0b6a9`）+ KUBECONFIG strict + minified pattern（James `c0a4ffd`） |
-| **MySQL** | William msg=31b68ccc 报告 idc bastion 共享 `~/.kube/config` 同 family 风险；CRD count + VolumeSnapshot 先决 blocker | runner 启动不验 fingerprint → addon install/upgrade 路径 silent 落到错 cluster | 同 SQL Server 三层防御模式（adoption） |
+| Line | 性质 | 锚点 | 同 family 体现 | mitigation 模式 |
+|---|---|---|---|---|
+| **Valkey** | incident | Valkey boot-up self-catch incident，shared `~/.kube/config` 残留 stale context 导致 boot-up self-catch | 共享 client state 残留污染 → addon helm install 落到错 cluster | ①程序锁（每脚本 `--context=`）+ ②fingerprint（boot-up server URL 探测） |
+| **SQL Server** | incident | r2 writer context-flip artifact 双窗口 408 条 client_artifact entries（[`cases/methodology/r2-writer-context-flip-2026-05-04-case.md`](cases/methodology/r2-writer-context-flip-2026-05-04-case.md)） | 67 处 kubectl 不 pin context → default context 被 Oracle line 切走 → writer 读到空 ns | ①kube() wrapper + ②minified kubeconfig file + ③`KUBE_STRICT=1` 三层防御 |
+| **Oracle** | incident | Run 7 chaos.sh 跑进 `k3d-mssql-kb103b5`（[`cases/methodology/run7-context-inheritance-2026-05-04-case.md`](cases/methodology/run7-context-inheritance-2026-05-04-case.md)），10 个 cluster-scoped 残留 + 24min cleanup wall-clock | chaos.sh 启动不锁 context → 继承 prior line 的 default | preflight guard（Oracle line commit `1c0b6a9`）+ KUBECONFIG strict + minified pattern（Oracle line commit `c0a4ffd`） |
+| **MySQL** | adoption + fingerprint evidence | MySQL line 报告 idc bastion 共享 `~/.kube/config` 同 family 风险；提供 KubeBlocks CRD count = 28 invariant 实证 + KB image multi-source via `ParametersDefinition.toolsSetup.toolConfigs[].image` 实证 | runner 启动不验 fingerprint → addon install/upgrade 路径 silent 落到错 cluster | 同 SQL Server 三层防御模式（adoption） |
 
-四条 line 在不到 24h 内各自独立踩到同一 family，说明这不是个例 doctrine。**N=4 evidence pool elevation** 把 §1.4 cornerstone 从 "self-evident in SQL Server line" 升级为 "cross-line invariant"。
+3 条 line 在不到 24h 内各自独立踩到同一 family incident + 第 4 条 line 提供 fingerprint 维度证据，说明这不是个例 doctrine。**N=3 incident + adoption/fingerprint evidence** 把 §1.4 cornerstone 从 "self-evident in SQL Server line" 升级为 "cross-line invariant"。
 
 ## 1. 四类 preflight category
 
@@ -123,8 +123,8 @@ KUBECONFIG=~/.kube/config-mssql kubectl ...
 
 1. **API server URL** — `kubectl config view --raw -o jsonpath='{.clusters[?(@.name=="<ctx>")].cluster.server}'` 与 baseline 比对
 2. **TLS SAN** — 通过 `openssl s_client -connect` 提取 SAN 列表，对比 intended cluster 的 cert SAN
-3. **CRD count = 28（KB 1.0.3-beta.5 invariant，N=2 cross-line 实证：SQL Server + MySQL）** — `kubectl get crd | wc -l` 应稳定 = 28（KB 1.0.3-beta.5 标准 set）。<28 必有 CRD 缺失，addon install 会 silent fail
-4. **VolumeSnapshot CRD first blocker（N=3 cross-line 实证：Oracle / SQL Server / MySQL）** — 没有 `volumesnapshots.snapshot.storage.k8s.io` CRD 时，KB controller 启动后 Backup CR reconcile 会卡死，但 chart install 阶段不报错。所有 line 都把它列为 first blocker check
+3. **KubeBlocks CRD count = 28（KB 1.0.3-beta.5 invariant，N=2 cross-line 实证：SQL Server + MySQL）** — `kubectl get crd -o name | grep kubeblocks.io | wc -l` 应稳定 = 28（KB 1.0.3-beta.5 标准 set）。**注意必须按 group filter `kubeblocks.io`**——cluster 上还会有 VolumeSnapshot / cert-manager / vcluster 等其他 CRD，直接 `kubectl get crd | wc -l` 会高出 28 误判 false-pass / false-fail。<28 必有 KubeBlocks CRD 缺失，addon install 会 silent fail
+4. **VolumeSnapshot CRD first blocker（N=3 cross-line 实证：Oracle / SQL Server / MySQL）** — 没有 `volumesnapshots.snapshot.storage.k8s.io` CRD 时，`kubeblocks-dataprotection` controller 的 cache sync / Backup CR reconcile 失败或重启，Backup CR 可能无 status；但 chart install 阶段不报错。所有 line 都把它列为 first blocker check
 5. **Addon 集合** — `helm list -A` 与 line baseline 比对，不在 baseline 的 addon 标记为 cross-line 残留
 6. **Node 集合** — `kubectl get nodes -o name` 与 baseline 比对（漂移可能是 vcluster→host 错 mount）
 
@@ -132,8 +132,8 @@ KUBECONFIG=~/.kube/config-mssql kubectl ...
 
 - 部署 cluster CR **必须走 `addons-cluster/<engine>` Helm chart**——chart 提供 addon entrypoint 期待的 Secret/Volume bootstrap（如 SQL Server 的 `<name>-certificates` Secret、自动 genCA dbm_certificate.{cer,pvk,pfx,crt,key,password}）。**手写 Cluster YAML / kubectl apply 会 silently 丢失这些 Secret，addon entrypoint 在运行时报 cryptic 错误（"cp: cannot stat '/certificates/dbm_certificate.*'"）**
 - StorageClass / CSI provisioner 在 vcluster→host 同名传递场景下，必须先在 vcluster 内 mirror 一个 SC 指向 host CSI provisioner（vcluster syncer 会把 PVC 路由到 host CSI）
-- chaos primitive：`kubectl delete pod` in vcluster = host pod kill（vcluster syncer 立刻同步），**不需要 chaos-mesh** for pod-kill 类 chaos（@Noah OB idc4 实证）
-- **KB image 多源**: config-manager sidecar image 来源不是 ComponentVersion，是 **`ParametersDefinition.toolsSetup.toolConfigs[].image`**（@Henry MySQL line 实证 sha256 e21043d3...796ea1）。candidate image distribution 走 ACR 模式（N=2: SQL Server addon `mcr.microsoft.com` + MySQL addon `<acr>/mysql-config-manager`）。如果 idc bastion 不能直连 source registry，每 line 都要走 sideload + retag 模式（详见 `notes/idc-vcluster-migration-intel.md`）
+- chaos primitive：`kubectl delete pod` in vcluster = host pod kill（vcluster syncer 立刻同步），**不需要 chaos-mesh** for pod-kill 类 chaos（OceanBase line idc4 实证）
+- **KB image 多源**: config-manager sidecar image 来源不只是 ComponentVersion，还可能是 **`ParametersDefinition.toolsSetup.toolConfigs[].image`**（MySQL line 实证：sidecar image 实际指向 `docker.io/apecloud/mysql:8.0.44`，retag 后是 ACR 内的 `apecloud/mysql:8.0.44`，sha256 e21043d3...796ea1）。candidate image distribution 通常走 ACR mirror 模式：source registry → ACR mirror → 各 idc bastion 拉取。如果 idc bastion 不能直连 source registry，每 line 都要 audit `ComponentVersion` 与 `ParametersDefinition.toolsSetup.toolConfigs[]` 两处 image 字段，确保都已 mirror 到 ACR（任一处遗漏就会 ImagePullBackOff）
 
 ### 1.4 Client-network preflight — network topology transition trigger
 
@@ -166,13 +166,13 @@ export KUBECONFIG=/tmp/kubeconfig-mssql.yaml
 
 不需要改一行业务脚本（kubectl 自动用 `KUBECONFIG=` 指向的文件，里面只有一个 context）。这是 r3+ kube() wrapper 落地之前的 immediate stop-gap，也可以作为长期模式。
 
-**注意 stale kubeconfig file 残留风险**：`/tmp/kubeconfig-*.yaml` / `~/.kube/config-*` 这种文件如果上次 session 没 cleanup，下次新 line 看到同名 / 近名文件可能误用。entry script 启动时要**强制重新 minify**（不能 reuse `if [ -f /tmp/kubeconfig-mssql.yaml ]`），end script 要 `trap rm` 清理。@Mia OB line 实证（Allen msg=54722af9 转发，Mia 复核 msg=2eedd315）：
+**注意 stale kubeconfig file 残留风险**：`/tmp/kubeconfig-*.yaml` / `~/.kube/config-*` 这种文件如果上次 session 没 cleanup，下次新 line 看到同名 / 近名文件可能误用。entry script 启动时要**强制重新 minify**（不能 reuse `if [ -f /tmp/kubeconfig-mssql.yaml ]`），end script 要 `trap rm` 清理。OceanBase line 实证：
 
 > OB line 在 Machine D 上同时有 idc4 host kubeconfig、有效 vcluster kubeconfig `~/.kube/config-ob-vcluster-raw`，以及旧的失效文件 `~/.kube/config-ob-vcluster`。风险不是已确认的具体故障，而是 typo / 自动补全 / 默认路径误用旧 kubeconfig，导致命令打到错目标或访问失败。入口脚本必须显式指定正确 kubeconfig，并先探测 `kubectl --kubeconfig <intended> get ns`；不要复用不明来源的 kubeconfig 文件。
 
 落地 pattern：文件名要能看出用途（哪个 host / 哪个 cluster / 哪条 line），并避免 `<base>` 与 `<base>-suffix` 这种视觉相似但语义不同的并存名字；不要复用不明来源的 kubeconfig 文件，启动前实际探测一次再跑业务。
 
-**架构层消除 stale 风险（Noah OB line idc4 实证 msg=4f2f1ee1）**：把 runner 迁到 host k8s 集群里跑，kubeconfig 走 Secret 挂载（`kubernetes.io/service-account-token` 或自定义 Secret with ClusterIP target），不再依赖 host filesystem 上散落的 `~/.kube/config-*` 文件。Pod 重建即拿到新 token，stale 风险从"文件管理纪律问题"降级为"架构上不存在"。这是 §1.4.c 整段问题最强的 mitigation，但前提是有专门的 host k8s 可以跑 runner（不是所有 line 都满足）。
+**架构层消除 stale 风险（OceanBase line idc4 实证）**：把 runner 迁到 host k8s 集群里跑，kubeconfig 走 Secret 挂载（`kubernetes.io/service-account-token` 或自定义 Secret with ClusterIP target），不再依赖 host filesystem 上散落的 `~/.kube/config-*` 文件。Pod 重建即拿到新 token，stale 风险从"文件管理纪律问题"降级为"架构上不存在"。这是 §1.4.c 整段问题最强的 mitigation，但前提是有专门的 host k8s 可以跑 runner（不是所有 line 都满足）。
 
 #### 1.4.d Mid-run 自保：context-guardian loop
 
@@ -219,34 +219,34 @@ macOS 上后台代理 app（Surge / ClashX / Proxifier）会把 HTTPS_PROXY=http
 | 3 | 同 Mac 上跑 chaos 测试，cleanup 后发现自己 cluster 里有别的 line 的 CmpD/OpsDef/PCR | "addon helm install 时多装了" | `kubectl --context=<intended> get cmpd,opsdef,paramconfigrenderer -A` **显式锁 context** 复核（不要在 default context 上查；default 可能已经被漂走），对比时间戳。根因往往是 chaos.sh 没 explicit `--context` / `KUBECONFIG`，default context 漂到别的 cluster，对方 addon install 落到自己 cluster |
 | 4 | 长跑 24h soak writer 突然连续报 "no primary pod label found" 但 cluster 实际正常（primary pod 4/4 Running、bad_ack=0） | "writer 进程 stuck" / "kubectl probe 卡住" / "primary 没 publish role label" | `kubectl --context=<intended> get pods -L kubeblocks.io/role` vs writer 视角对比。根因：writer 用 default context（`~/.kube/config` 的 current-context），被另一 line 的 `kubectl config use-context` 切到错的 cluster——是 **invariant 被 cross-line side effect 破坏**，不是 writer bug。修复：writer pin `--context` + r3+ `kube()` wrapper + `KUBE_STRICT=1` + 短期 context-guardian loop |
 | 4b | 同 #4 但发生在 doctrine 已成文 + 当事人 voice commitment 已下达 1h+ 后再次复发 | "上次提醒过了应该不会再犯" / "process discipline 应该够了" | 直接看 `slock daemon timestamp`（不可篡改）：第二次 fired_at 与 voice commitment time 之间 1h+ → 反证 voice commitment 不是 invariant。强制升级到 ①程序锁 + ②fingerprint + ③fail-fast 三层防御 |
-| 4c | runner 启动后报 "no namespace / no resource"，但同 host 上 manual `kubectl get ns` 正常（OB Machine D 风险，Mia msg=2eedd315 实证；Allen msg=54722af9 relay） | "vcluster API 不稳定" / "kubeconfig 过期" | 列出 host 上所有 kubeconfig 候选 + 检查它们的 server URL / context name + `kubectl --kubeconfig=<候选> get ns` 各跑一次对比。根因：host 上同时存在 idc4 host kubeconfig + 有效 vcluster kubeconfig + 旧失效 vcluster kubeconfig，typo / 自动补全 / 默认路径误用旧文件 → 命令打到错目标或访问失败。修复：入口脚本显式指定正确 kubeconfig + 启动前探测 + 文件名带 purpose（不复用不明来源的文件） |
-| 5 | 测试启动后立刻报 cluster context 不对 / 找不到 namespace / addon CRD 缺失（boot-up 阶段） | "addon install 失败" / "cluster crash" | boot-up 阶段就跑 fingerprint preflight（API server URL + CRD count + addon set），fail-fast → 这是 Bob2 Valkey msg=3961e096 实证：boot-up self-catch latency = 30s，远小于 mid-soak detect (35min) 远小于 post-voice-commit (1h+)。**Reset-cycle latency gradient: 越早 catch cost 越小**，所以 preflight 必须在 boot-up entry 就跑，不要等长跑里 mid-run 出问题 |
-| 6 | idc bastion 上 addon helm install 落到 wrong cluster（Run 7 family，N=4 cross-line） | "chaos.sh 选错 cluster" / "脚本写死了 cluster name" | chaos.sh / runner 入口加 `KUBECONFIG=` 显式锁 + `current-context == intended` assert + 11-line preflight guard（James commit `1c0b6a9` 模板）。根因：脚本启动**继承**前一 session 留下的 default context，silent fall through 到任何 default。voice commitment 不防 inheritance |
-| 7 | candidate image 分发到 IDC 后 helm install 失败 "ImagePullBackOff"（Henry MySQL line 实证 sha256 e21043d3...796ea1） | "镜像 push 失败" / "registry quota 满" | 1) `kubectl describe pod` 看真实 image ref；2) 对照 `ParametersDefinition.toolsSetup.toolConfigs[].image`（**这才是 config-manager sidecar 的 image 来源，不是 ComponentVersion**）；3) `crictl images` 在 node 上验。根因：image multi-source（ComponentVersion + ParametersDefinition.toolsSetup）任一处指向不在 ACR mirror 的 source = pull fail |
+| 4c | runner 启动后报 "no namespace / no resource"，但同 host 上 manual `kubectl get ns` 正常（OceanBase Machine D 风险实证） | "vcluster API 不稳定" / "kubeconfig 过期" | 列出 host 上所有 kubeconfig 候选 + 检查它们的 server URL / context name + `kubectl --kubeconfig=<候选> get ns` 各跑一次对比。根因：host 上同时存在 idc4 host kubeconfig + 有效 vcluster kubeconfig + 旧失效 vcluster kubeconfig，typo / 自动补全 / 默认路径误用旧文件 → 命令打到错目标或访问失败。修复：入口脚本显式指定正确 kubeconfig + 启动前探测 + 文件名带 purpose（不复用不明来源的文件） |
+| 5 | 测试启动后立刻报 cluster context 不对 / 找不到 namespace / addon CRD 缺失（boot-up 阶段） | "addon install 失败" / "cluster crash" | boot-up 阶段就跑 fingerprint preflight（API server URL + KubeBlocks CRD count + addon set），fail-fast → Valkey line boot-up self-catch 实证：boot-up self-catch latency = 30s，远小于 mid-soak detect (35min) 远小于 post-voice-commit (1h+)。**Reset-cycle latency gradient: 越早 catch cost 越小**，所以 preflight 必须在 boot-up entry 就跑，不要等长跑里 mid-run 出问题 |
+| 6 | idc bastion 上 addon helm install 落到 wrong cluster（Run 7 family，N=3 incident cross-line） | "chaos.sh 选错 cluster" / "脚本写死了 cluster name" | chaos.sh / runner 入口加 `KUBECONFIG=` 显式锁 + `current-context == intended` assert + 11-line preflight guard（Oracle line commit `1c0b6a9` 模板）。根因：脚本启动**继承**前一 session 留下的 default context，silent fall through 到任何 default。voice commitment 不防 inheritance |
+| 7 | candidate image 分发到 IDC 后 helm install 失败 "ImagePullBackOff"（MySQL line 实证 sha256 e21043d3...796ea1） | "镜像 push 失败" / "registry quota 满" | 1) `kubectl describe pod` 看真实 image ref；2) 对照 `ParametersDefinition.toolsSetup.toolConfigs[].image`（**这是 config-manager sidecar image 的另一来源，不只是 ComponentVersion**）；3) `crictl images` 在 node 上验。根因：image multi-source（ComponentVersion + ParametersDefinition.toolsSetup）任一处指向不在 ACR mirror 的 source = pull fail |
 
 ## 案例
 
-- [`cases/methodology/run7-context-inheritance-2026-05-04-case.md`](cases/methodology/run7-context-inheritance-2026-05-04-case.md) — Oracle Run 7 context leak（fired_at 12:48Z / detected_at 12:57Z / mitigated_at 13:21Z）；时间线、10 个残留 CmpD/OpsDef/PCR 清单、cleanup 24min wall-clock、James 11-line preflight commit `1c0b6a9` + KUBECONFIG strict + minified `c0a4ffd`、cascade pattern (Run 7 → r2 W1)
-- [`cases/methodology/r2-writer-context-flip-2026-05-04-case.md`](cases/methodology/r2-writer-context-flip-2026-05-04-case.md) — r2 24h soak writer artifact window（fired_at 12:57Z / detected_at 13:18Z / mitigated_at 13:53Z 第一窗口；fired_at 13:57:07Z / mitigated_at via guardian 第二窗口）；408 条 client_failed 双窗口 id range；Jerry 67-call kubectl audit + `kube()` wrapper fix plan；context-guardian 10s loop 紧急绷带；voice-commitment-not-invariant 实证
+- [`cases/methodology/run7-context-inheritance-2026-05-04-case.md`](cases/methodology/run7-context-inheritance-2026-05-04-case.md) — Oracle Run 7 context leak（fired_at 12:48Z / detected_at 12:57Z / mitigated_at 13:21Z）；时间线、10 个残留 CmpD/OpsDef/PCR 清单、cleanup 24min wall-clock、Oracle line 11-line preflight commit `1c0b6a9` + KUBECONFIG strict + minified `c0a4ffd`、cascade pattern (Run 7 → r2 W1)
+- [`cases/methodology/r2-writer-context-flip-2026-05-04-case.md`](cases/methodology/r2-writer-context-flip-2026-05-04-case.md) — r2 24h soak writer artifact window（fired_at 12:57Z / detected_at 13:18Z / mitigated_at 13:53Z 第一窗口；fired_at 13:57:07Z / mitigated_at via guardian 第二窗口）；408 条 client_failed 双窗口 id range；SQL Server line 67-call kubectl audit + `kube()` wrapper fix plan；context-guardian 10s loop 紧急绷带；voice-commitment-not-invariant 实证
 
 ## Cross-references
 
 - `addon-test-environment-gate-hygiene-guide.md` — 单 line / 单环境 post-restart 视角。本文是它的 cross-line 补集
-- `addon-evidence-discipline-guide.md` — 三规则：N≥2 案例 / 描述强度匹配证据强度 / 不二选一表述。本文 N=4 evidence pool 自身按这套规则跑
+- `addon-evidence-discipline-guide.md` — 三规则：N≥2 案例 / 描述强度匹配证据强度 / 不二选一表述。本文 N=3 incident + MySQL adoption/fingerprint evidence pool 自身按这套规则跑
 - `addon-github-submission-discipline-guide.md` — Doctrine B：commit no AI co-author trailer。本文 PR 的 commit hygiene 引用这个
 
 ## Author / evidence partners
 
 - 主笔：Tom (SQL Server line)
-- Evidence partner: James (Oracle line) — §1.1 + §1.4 cornerstone 共建；Run 7 incident 一手数据；context-flip-r2 二次重发 cross-line investigation；commit `1c0b6a9` + `c0a4ffd` 双 mitigation 实施
+- Evidence partner: James (Oracle line) — §1.1 + §1.4 cornerstone 共建；Run 7 incident 一手数据；context-flip-r2 二次重发 cross-line investigation；commits `1c0b6a9` + `c0a4ffd` 双 mitigation 实施
 - Evidence partner: John (Oracle line) — Run 7 first-detect；context-flip 双 incident self-report timeline；shell history 取证；5 数据点 inventory
-- Evidence partner: Jerry (SQL Server test) — r2 writer artifact 数据；67 处 kubectl audit；patch v1/v2 实现；context-guardian PID 83771
-- Evidence partner: Alice (Valkey line) — fingerprint pattern prose block；HTTPS_PROXY interception case；Bob2 boot-up self-catch incident
-- Evidence partner: William (MySQL line) — N=4 evidence pool elevation；§2 row 3 falsification with `--context=<intended>`；CRD count = 28 N=2 invariant；MySQL bastion 同 family 风险报告
-- Evidence partner: Henry (MySQL line) — KB image multi-source via ParametersDefinition.toolsSetup.toolConfigs evidence (sha256 e21043d3...796ea1)；candidate image distribution N=2 ACR pattern
-- Evidence partner: Mia (OB line) — Machine D 多 kubeconfig 共存 + typo / autocomplete 误用旧文件风险案例（via Allen msg=54722af9 forward + Mia 复核 msg=2eedd315）
-- Evidence partner: Allen (cross-line review) — filename + cross-ref placement；§1.3 fingerprint 维度排序建议；OB case relay
-- Evidence partner: Noah (OB line) — vcluster→host pod kill primitive idc4 实证；chaos-mesh 不必要的 N=2 confirmation
-- Evidence partner: Bob2 (Valkey test) — boot-up self-catch incident msg=3961e096；reset-cycle latency gradient lower-bound 数据点
+- Evidence partner: Jerry (SQL Server test) — r2 writer artifact 数据；67 处 kubectl audit；patch v1/v2 实现；context-guardian
+- Evidence partner: Alice (Valkey line) — fingerprint pattern prose block；HTTPS_PROXY interception case；Valkey boot-up self-catch incident relay
+- Evidence partner: William (MySQL line) — N=3+adoption evidence pool elevation；§2 row 3 falsification with `--context=<intended>`；KubeBlocks CRD count = 28 N=2 invariant；MySQL bastion 同 family 风险报告
+- Evidence partner: Henry (MySQL line) — KB image multi-source via ParametersDefinition.toolsSetup.toolConfigs evidence (sha256 e21043d3...796ea1)；candidate image distribution ACR mirror pattern
+- Evidence partner: Mia (OceanBase line) — Machine D 多 kubeconfig 共存 + typo / autocomplete 误用旧文件风险案例（via cross-line forward + Mia 复核）
+- Evidence partner: Allen (cross-line review) — filename + cross-ref placement；§1.3 fingerprint 维度排序建议；OceanBase case relay
+- Evidence partner: Noah (OceanBase line) — vcluster→host pod kill primitive idc4 实证；chaos-mesh 不必要的 N=2 confirmation；架构层消除 stale kubeconfig 风险（Secret-mounted + ClusterIP）
+- Evidence partner: Bob2 (Valkey test) — boot-up self-catch incident；reset-cycle latency gradient lower-bound 数据点
 
-(see `addon-evidence-discipline-guide.md` 三规则——这篇 doc 自己也按那个规则跑：N≥4 案例（4 line 同 family 双 incident），描述强度匹配证据强度。)
+(see `addon-evidence-discipline-guide.md` 三规则——这篇 doc 自己也按那个规则跑：N=3 cross-line incident + MySQL adoption/fingerprint evidence，描述强度匹配证据强度。)

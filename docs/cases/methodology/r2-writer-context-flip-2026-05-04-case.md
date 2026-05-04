@@ -9,22 +9,22 @@
 
 | ts (UTC) | ts (+0800) | event | source-of-truth |
 |---|---|---|---|
-| 12:48Z | 20:48 | Oracle Run 7 chaos 启动（已知 fired_at，详见 run7-context-inheritance-incident.md） | John self-report |
-| 12:57Z | 20:57 | Run 7 跑进错误 cluster (k3d-mssql-kb103b5) → John kill chaos + execute `kubectl config use-context k3d-oracle-test` | John DM msg=f05be90d |
-| 13:18:08Z | 21:18:08 | r2 writer (Mac k3d-mssql-kb103b5 sqlserver-soak-24h-r2) 第一次报 "no primary pod label found" id=4251 | Jerry observation msg=c708b702 |
-| 13:18:08Z–13:53:06Z | 21:18–21:53 | **Window 1 artifact**: 360 条虚假 client_failed (id 4251–4610)，writer `pod_role_rows()` 用 default context = k3d-oracle-test，查 sqlserver-soak-24h-r2 ns 返回空 | Jerry incident file |
-| 13:45:xxZ | 21:45 | Jerry 交叉对比 cluster 实际（mssql-2 primary, 4/4 Running, bad_ack=0）vs writer 视角（看不到 primary）→ 定位根因 | Jerry msg=c708b702 |
-| 13:53:00Z | 21:53 | Jerry execute `kubectl config use-context k3d-mssql-kb103b5` 切回 default context | Jerry msg=beaba345 |
-| 13:53:06Z | 21:53:06 | writer id=4611 第一条 client_rc0 恢复 | Jerry id observation |
-| 13:53:46Z | 21:53:46 | health-sampler 60s 周期同步恢复 (Running/Running 3/3, primary=mssqlsoak24h2-mssql-2) | Jerry msg=beaba345 |
-| 13:53:06Z–13:57:07Z | 21:53–21:57 | 干净窗口 32 条 client_rc0 (id 4611–4642) | Jerry table |
-| 13:57:00Z | 21:57:00 | **Slock msg=9b55d55f time=** John 在 #oracle:d4ca44fb 自报 "kill chaos.sh + 切回 k3d-oracle-test"。命令文本 `kill 31093 31105 2>/dev/null; kubectl config use-context k3d-oracle-test` | John DM msg=26a492af + slock daemon timestamp (不可篡改) |
-| 13:57:07Z | 21:57:07 | r2 writer id=4643 第二次报 "no primary pod label found"（writer poll 7s 后命中） | Jerry msg=ba367713 |
-| 13:57:07Z–14:01:21Z | 21:57–22:01 | **Window 2 artifact**: 48 条虚假 client_failed (id 4643–4689) | Jerry msg=234246ee |
-| 14:01:21Z | 22:01:21 | Jerry 二次切回 default context = k3d-mssql-kb103b5；writer id=4690 client_rc0 | Jerry msg=234246ee |
-| 14:02:32Z | 22:02:32 | Jerry 起 context-guardian PID 83771 (10s loop force `use-context k3d-mssql-kb103b5`)。Guardian 0 次翻转日志（14:02:32Z 起干净） | Jerry msg=ff41db8e |
-| ~14:03:xxZ | ~22:03 | Oracle 端 John 切 minified kubeconfig (`KUBECONFIG=/tmp/kubeconfig-oracle.yaml`)，完全绕开 ~/.kube/config default context；guardian + minified 双 stop-gap 生效，**永久不再 flip** | James DM msg=478b786d → 642b6f88 |
-| 14:08Z | 22:08 | r3+ patch v2 (kube() wrapper + KUBE_STRICT + KUBECONFIG + minified file + trap 清理) review approved，等 Jerry commit | Jerry msg=ff41db8e + Tom approve msg=758b7ccd |
+| 12:48Z | 20:48 | Oracle Run 7 chaos 启动（已知 fired_at，详见 [`run7-context-inheritance-2026-05-04-case.md`](run7-context-inheritance-2026-05-04-case.md)） | Oracle test engineer self-report |
+| 12:57Z | 20:57 | Run 7 跑进错误 cluster (k3d-mssql-kb103b5) → Oracle test engineer kill chaos + execute `kubectl config use-context k3d-oracle-test` | Oracle test engineer DM self-report |
+| 13:18:08Z | 21:18:08 | r2 writer (Mac k3d-mssql-kb103b5 sqlserver-soak-24h-r2) 第一次报 "no primary pod label found" id=4251 | SQL Server test engineer observation |
+| 13:18:08Z–13:53:06Z | 21:18–21:53 | **Window 1 artifact**: 360 条虚假 client_failed (id 4251–4610)，writer `pod_role_rows()` 用 default context = k3d-oracle-test，查 sqlserver-soak-24h-r2 ns 返回空 | SQL Server test engineer incident file |
+| 13:45:xxZ | 21:45 | SQL Server test engineer 交叉对比 cluster 实际（mssql-2 primary, 4/4 Running, bad_ack=0）vs writer 视角（看不到 primary）→ 定位根因 | SQL Server test engineer observation |
+| 13:53:00Z | 21:53 | SQL Server test engineer execute `kubectl config use-context k3d-mssql-kb103b5` 切回 default context | SQL Server test engineer self-report |
+| 13:53:06Z | 21:53:06 | writer id=4611 第一条 client_rc0 恢复 | SQL Server test engineer id observation |
+| 13:53:46Z | 21:53:46 | health-sampler 60s 周期同步恢复 (Running/Running 3/3, primary=mssqlsoak24h2-mssql-2) | SQL Server test engineer self-report |
+| 13:53:06Z–13:57:07Z | 21:53–21:57 | 干净窗口 32 条 client_rc0 (id 4611–4642) | SQL Server test engineer table |
+| 13:57:00Z | 21:57:00 | Oracle test engineer 在 Oracle line 自报 "kill chaos.sh + 切回 k3d-oracle-test"。命令文本 `kill 31093 31105 2>/dev/null; kubectl config use-context k3d-oracle-test` | Oracle test engineer DM self-report + chat daemon timestamp (不可篡改) |
+| 13:57:07Z | 21:57:07 | r2 writer id=4643 第二次报 "no primary pod label found"（writer poll 7s 后命中） | SQL Server test engineer observation |
+| 13:57:07Z–14:01:21Z | 21:57–22:01 | **Window 2 artifact**: 48 条虚假 client_failed (id 4643–4689) | SQL Server test engineer observation |
+| 14:01:21Z | 22:01:21 | SQL Server test engineer 二次切回 default context = k3d-mssql-kb103b5；writer id=4690 client_rc0 | SQL Server test engineer observation |
+| 14:02:32Z | 22:02:32 | SQL Server test engineer 起 context-guardian (10s loop force `use-context k3d-mssql-kb103b5`)。Guardian 0 次翻转日志（14:02:32Z 起干净） | SQL Server test engineer self-report |
+| ~14:03:xxZ | ~22:03 | Oracle test engineer 切 minified kubeconfig (`KUBECONFIG=/tmp/kubeconfig-oracle.yaml`)，完全绕开 ~/.kube/config default context；guardian + minified 双 stop-gap 生效，**永久不再 flip** | Oracle TL DM cross-line discussion |
+| 14:08Z | 22:08 | r3+ patch v2 (kube() wrapper + KUBE_STRICT + KUBECONFIG + minified file + trap 清理) review approved，等 SQL Server test engineer commit | SQL Server test engineer + SQL Server TL approval |
 
 ## 数据汇总
 
@@ -87,13 +87,13 @@
 
 ## 附件
 
-- `incidents/r2-context-flip-client-artifact.md` (sqlserver-tests repo, by Jerry)
-- `incidents/kubectl-audit.md` (sqlserver-tests repo, by Jerry, 67 处 audit)
-- `incidents/kube-wrapper-patch.diff` (sqlserver-tests repo, by Jerry, r3 prep)
+- `incidents/r2-context-flip-client-artifact.md` (sqlserver-tests repo, by SQL Server test engineer)
+- `incidents/kubectl-audit.md` (sqlserver-tests repo, by SQL Server test engineer, 67 处 audit)
+- `incidents/kube-wrapper-patch.diff` (sqlserver-tests repo, by SQL Server test engineer, r3 prep)
 
 ## Author / evidence partners
 
 - 主笔：Tom (SQL Server TL)
-- Evidence partner: Jerry (SQL Server test) — writer artifact 数据、67 处 audit、patch 实现
-- Evidence partner: John (Oracle test) — 双 fired_at self-report 时间戳、command 取证
+- Evidence partner: Jerry (SQL Server test engineer) — writer artifact 数据、67 处 audit、patch 实现、context-guardian
+- Evidence partner: John (Oracle test engineer) — 双 fired_at self-report 时间戳、command 取证
 - Evidence partner: James (Oracle TL) — minified kubeconfig stop-gap pattern 提出、doctrine 升级 "voice commitment is not invariant"
