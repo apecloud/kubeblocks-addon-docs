@@ -166,7 +166,13 @@ export KUBECONFIG=/tmp/kubeconfig-mssql.yaml
 
 不需要改一行业务脚本（kubectl 自动用 `KUBECONFIG=` 指向的文件，里面只有一个 context）。这是 r3+ kube() wrapper 落地之前的 immediate stop-gap，也可以作为长期模式。
 
-**注意 stale kubeconfig file 残留风险**：`/tmp/kubeconfig-*.yaml` 这种文件如果上次 session 没 cleanup，下次新 line 看到同名文件可能误用。entry script 启动时要**强制重新 minify**（不能 reuse `if [ -f /tmp/kubeconfig-mssql.yaml ]`），end script 要 `trap rm` 清理。@Mia OB line 实证（Allen msg=54722af9 转发）：stale `/tmp/kubeconfig-ob.yaml` 持有上一轮的 token 已过期，OB runner silent 401 跑了 12min 才 catch。
+**注意 stale kubeconfig file 残留风险**：`/tmp/kubeconfig-*.yaml` / `~/.kube/config-*` 这种文件如果上次 session 没 cleanup，下次新 line 看到同名 / 近名文件可能误用。entry script 启动时要**强制重新 minify**（不能 reuse `if [ -f /tmp/kubeconfig-mssql.yaml ]`），end script 要 `trap rm` 清理。@Mia OB line 实证（Allen msg=54722af9 转发，Mia 复核 msg=2eedd315）：
+
+> OB line 在 Machine D 上同时有 idc4 host kubeconfig、有效 vcluster kubeconfig `~/.kube/config-ob-vcluster-raw`，以及旧的失效文件 `~/.kube/config-ob-vcluster`。风险不是已确认的具体故障，而是 typo / 自动补全 / 默认路径误用旧 kubeconfig，导致命令打到错目标或访问失败。入口脚本必须显式指定正确 kubeconfig，并先探测 `kubectl --kubeconfig <intended> get ns`；不要复用不明来源的 kubeconfig 文件。
+
+落地 pattern：文件名要能看出用途（哪个 host / 哪个 cluster / 哪条 line），并避免 `<base>` 与 `<base>-suffix` 这种视觉相似但语义不同的并存名字；不要复用不明来源的 kubeconfig 文件，启动前实际探测一次再跑业务。
+
+**架构层消除 stale 风险（Noah OB line idc4 实证 msg=4f2f1ee1）**：把 runner 迁到 host k8s 集群里跑，kubeconfig 走 Secret 挂载（`kubernetes.io/service-account-token` 或自定义 Secret with ClusterIP target），不再依赖 host filesystem 上散落的 `~/.kube/config-*` 文件。Pod 重建即拿到新 token，stale 风险从"文件管理纪律问题"降级为"架构上不存在"。这是 §1.4.c 整段问题最强的 mitigation，但前提是有专门的 host k8s 可以跑 runner（不是所有 line 都满足）。
 
 #### 1.4.d Mid-run 自保：context-guardian loop
 
@@ -213,7 +219,7 @@ macOS 上后台代理 app（Surge / ClashX / Proxifier）会把 HTTPS_PROXY=http
 | 3 | 同 Mac 上跑 chaos 测试，cleanup 后发现自己 cluster 里有别的 line 的 CmpD/OpsDef/PCR | "addon helm install 时多装了" | `kubectl --context=<intended> get cmpd,opsdef,paramconfigrenderer -A` **显式锁 context** 复核（不要在 default context 上查；default 可能已经被漂走），对比时间戳。根因往往是 chaos.sh 没 explicit `--context` / `KUBECONFIG`，default context 漂到别的 cluster，对方 addon install 落到自己 cluster |
 | 4 | 长跑 24h soak writer 突然连续报 "no primary pod label found" 但 cluster 实际正常（primary pod 4/4 Running、bad_ack=0） | "writer 进程 stuck" / "kubectl probe 卡住" / "primary 没 publish role label" | `kubectl --context=<intended> get pods -L kubeblocks.io/role` vs writer 视角对比。根因：writer 用 default context（`~/.kube/config` 的 current-context），被另一 line 的 `kubectl config use-context` 切到错的 cluster——是 **invariant 被 cross-line side effect 破坏**，不是 writer bug。修复：writer pin `--context` + r3+ `kube()` wrapper + `KUBE_STRICT=1` + 短期 context-guardian loop |
 | 4b | 同 #4 但发生在 doctrine 已成文 + 当事人 voice commitment 已下达 1h+ 后再次复发 | "上次提醒过了应该不会再犯" / "process discipline 应该够了" | 直接看 `slock daemon timestamp`（不可篡改）：第二次 fired_at 与 voice commitment time 之间 1h+ → 反证 voice commitment 不是 invariant。强制升级到 ①程序锁 + ②fingerprint + ③fail-fast 三层防御 |
-| 4c | OB runner silent 401 跑了 12min 才 catch（Mia 实证，Allen 转发 msg=54722af9） | "OB API token 过期" / "vcluster API 不稳定" | `ls -la /tmp/kubeconfig-*.yaml` 检查 mtime + `kubectl --kubeconfig=/tmp/kubeconfig-ob.yaml whoami`。根因：上一轮 stale `/tmp/kubeconfig-ob.yaml` 没被 cleanup，新 session reuse 它持有的过期 token。修复：entry script 强制 re-minify（不能 reuse），end script `trap rm` 清理 |
+| 4c | runner 启动后报 "no namespace / no resource"，但同 host 上 manual `kubectl get ns` 正常（OB Machine D 风险，Mia msg=2eedd315 实证；Allen msg=54722af9 relay） | "vcluster API 不稳定" / "kubeconfig 过期" | 列出 host 上所有 kubeconfig 候选 + 检查它们的 server URL / context name + `kubectl --kubeconfig=<候选> get ns` 各跑一次对比。根因：host 上同时存在 idc4 host kubeconfig + 有效 vcluster kubeconfig + 旧失效 vcluster kubeconfig，typo / 自动补全 / 默认路径误用旧文件 → 命令打到错目标或访问失败。修复：入口脚本显式指定正确 kubeconfig + 启动前探测 + 文件名带 purpose（不复用不明来源的文件） |
 | 5 | 测试启动后立刻报 cluster context 不对 / 找不到 namespace / addon CRD 缺失（boot-up 阶段） | "addon install 失败" / "cluster crash" | boot-up 阶段就跑 fingerprint preflight（API server URL + CRD count + addon set），fail-fast → 这是 Bob2 Valkey msg=3961e096 实证：boot-up self-catch latency = 30s，远小于 mid-soak detect (35min) 远小于 post-voice-commit (1h+)。**Reset-cycle latency gradient: 越早 catch cost 越小**，所以 preflight 必须在 boot-up entry 就跑，不要等长跑里 mid-run 出问题 |
 | 6 | idc bastion 上 addon helm install 落到 wrong cluster（Run 7 family，N=4 cross-line） | "chaos.sh 选错 cluster" / "脚本写死了 cluster name" | chaos.sh / runner 入口加 `KUBECONFIG=` 显式锁 + `current-context == intended` assert + 11-line preflight guard（James commit `1c0b6a9` 模板）。根因：脚本启动**继承**前一 session 留下的 default context，silent fall through 到任何 default。voice commitment 不防 inheritance |
 | 7 | candidate image 分发到 IDC 后 helm install 失败 "ImagePullBackOff"（Henry MySQL line 实证 sha256 e21043d3...796ea1） | "镜像 push 失败" / "registry quota 满" | 1) `kubectl describe pod` 看真实 image ref；2) 对照 `ParametersDefinition.toolsSetup.toolConfigs[].image`（**这才是 config-manager sidecar 的 image 来源，不是 ComponentVersion**）；3) `crictl images` 在 node 上验。根因：image multi-source（ComponentVersion + ParametersDefinition.toolsSetup）任一处指向不在 ACR mirror 的 source = pull fail |
@@ -238,7 +244,7 @@ macOS 上后台代理 app（Surge / ClashX / Proxifier）会把 HTTPS_PROXY=http
 - Evidence partner: Alice (Valkey line) — fingerprint pattern prose block；HTTPS_PROXY interception case；Bob2 boot-up self-catch incident
 - Evidence partner: William (MySQL line) — N=4 evidence pool elevation；§2 row 3 falsification with `--context=<intended>`；CRD count = 28 N=2 invariant；MySQL bastion 同 family 风险报告
 - Evidence partner: Henry (MySQL line) — KB image multi-source via ParametersDefinition.toolsSetup.toolConfigs evidence (sha256 e21043d3...796ea1)；candidate image distribution N=2 ACR pattern
-- Evidence partner: Mia (OB line) — stale `/tmp/kubeconfig-ob.yaml` residue silent 401 12min latency case (via Allen msg=54722af9 forward)
+- Evidence partner: Mia (OB line) — Machine D 多 kubeconfig 共存 + typo / autocomplete 误用旧文件风险案例（via Allen msg=54722af9 forward + Mia 复核 msg=2eedd315）
 - Evidence partner: Allen (cross-line review) — filename + cross-ref placement；§1.3 fingerprint 维度排序建议；OB case relay
 - Evidence partner: Noah (OB line) — vcluster→host pod kill primitive idc4 实证；chaos-mesh 不必要的 N=2 confirmation
 - Evidence partner: Bob2 (Valkey test) — boot-up self-catch incident msg=3961e096；reset-cycle latency gradient lower-bound 数据点

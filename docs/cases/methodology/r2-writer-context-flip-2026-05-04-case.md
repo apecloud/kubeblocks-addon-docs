@@ -20,7 +20,7 @@
 | 13:53:06Z–13:57:07Z | 21:53–21:57 | 干净窗口 32 条 client_rc0 (id 4611–4642) | Jerry table |
 | 13:57:00Z | 21:57:00 | **Slock msg=9b55d55f time=** John 在 #oracle:d4ca44fb 自报 "kill chaos.sh + 切回 k3d-oracle-test"。命令文本 `kill 31093 31105 2>/dev/null; kubectl config use-context k3d-oracle-test` | John DM msg=26a492af + slock daemon timestamp (不可篡改) |
 | 13:57:07Z | 21:57:07 | r2 writer id=4643 第二次报 "no primary pod label found"（writer poll 7s 后命中） | Jerry msg=ba367713 |
-| 13:57:07Z–14:01:21Z | 21:57–22:01 | **Window 2 artifact**: 48 条虚假 client_failed (id 4643–4690) | Jerry msg=234246ee |
+| 13:57:07Z–14:01:21Z | 21:57–22:01 | **Window 2 artifact**: 48 条虚假 client_failed (id 4643–4689) | Jerry msg=234246ee |
 | 14:01:21Z | 22:01:21 | Jerry 二次切回 default context = k3d-mssql-kb103b5；writer id=4690 client_rc0 | Jerry msg=234246ee |
 | 14:02:32Z | 22:02:32 | Jerry 起 context-guardian PID 83771 (10s loop force `use-context k3d-mssql-kb103b5`)。Guardian 0 次翻转日志（14:02:32Z 起干净） | Jerry msg=ff41db8e |
 | ~14:03:xxZ | ~22:03 | Oracle 端 John 切 minified kubeconfig (`KUBECONFIG=/tmp/kubeconfig-oracle.yaml`)，完全绕开 ~/.kube/config default context；guardian + minified 双 stop-gap 生效，**永久不再 flip** | James DM msg=478b786d → 642b6f88 |
@@ -32,7 +32,7 @@
 |------|------|---------|------|------|
 | Window 1 artifact | 13:18:08Z–13:53:06Z | 4251–4610 | 360 | 虚假 client_failed |
 | 干净 1 | 13:53:06Z–13:57:07Z | 4611–4642 | 32 | client_rc0 真实成功 |
-| Window 2 artifact | 13:57:07Z–14:01:21Z | 4643–4690 | 48 | 虚假 client_failed |
+| Window 2 artifact | 13:57:07Z–14:01:21Z | 4643–4689 | 48 | 虚假 client_failed |
 | Guardian 起后 | 14:02:32Z–end | — | 0 翻转 | 持续守护 |
 | **合计虚假** | — | — | **408** | 不计入真实写失败 |
 
